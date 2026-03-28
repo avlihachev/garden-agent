@@ -1,0 +1,66 @@
+import axios from "axios";
+import { config } from "./config.js";
+import { AgentMessage } from "./types.js";
+import { processMessage } from "./agent.js";
+
+const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+
+async function fetchMessages(): Promise<AgentMessage[]> {
+  const url = `${config.botUrl}/api/agent/messages?secret=${encodeURIComponent(config.agentSecret)}`;
+  const response = await axios.get<{ messages: AgentMessage[] }>(url, {
+    timeout: 10000,
+  });
+  return response.data.messages;
+}
+
+async function sendReply(chatId: number, text: string): Promise<void> {
+  await axios.post(
+    `${config.botUrl}/api/agent/reply`,
+    { secret: config.agentSecret, chatId, text, parseMode: null },
+    { timeout: 10000 }
+  );
+}
+
+async function pollOnce(): Promise<void> {
+  const messages = await fetchMessages();
+  if (messages.length === 0) return;
+
+  console.log(`📨 Received ${messages.length} message(s)`);
+
+  for (const msg of messages) {
+    const age = Date.now() - msg.timestamp;
+    if (age > STALE_THRESHOLD_MS) {
+      console.log(`⏭ Skipping stale message ${msg.id} (${Math.round(age / 3600000)}h old)`);
+      continue;
+    }
+
+    try {
+      const reply = await processMessage(msg);
+      if (reply) {
+        await sendReply(msg.chatId, reply);
+      }
+    } catch (error) {
+      console.error(`Error processing message ${msg.id}:`, error);
+      await sendReply(msg.chatId, "Произошла ошибка при обработке сообщения.");
+    }
+  }
+}
+
+export function startPolling(): void {
+  console.log(`🔄 Polling every ${config.pollIntervalMs}ms`);
+
+  const poll = async () => {
+    try {
+      await pollOnce();
+    } catch (error: any) {
+      if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
+        // bot unreachable — silent retry
+      } else {
+        console.error("Poll error:", error.message);
+      }
+    }
+  };
+
+  poll();
+  setInterval(poll, config.pollIntervalMs);
+}
