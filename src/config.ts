@@ -15,4 +15,6 @@ export const config = {
   skillDir: required("SKILL_DIR"),
   mcpGardenPath: required("MCP_GARDEN_PATH"),
   chatId: parseInt(required("CHAT_ID"), 10),
+  latitude: parseFloat(process.env.LATITUDE || "63.84"),
+  longitude: parseFloat(process.env.LONGITUDE || "23.13"),
 };

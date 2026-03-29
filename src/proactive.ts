@@ -2,16 +2,10 @@ import cron from "node-cron";
 import axios from "axios";
 import { config } from "./config.js";
 import { runAgent } from "./agent.js";
+import { sendReply } from "./botApi.js";
 
 let lastProactiveDate: string = "";
-
-async function sendReply(text: string): Promise<void> {
-  await axios.post(
-    `${config.botUrl}/api/agent/reply`,
-    { secret: config.agentSecret, chatId: config.chatId, text, parseMode: null },
-    { timeout: 10000 }
-  );
-}
+let lastFrostAlertDate: string = "";
 
 async function morningCheck(): Promise<void> {
   const today = new Date().toISOString().split("T")[0];
@@ -29,7 +23,7 @@ async function morningCheck(): Promise<void> {
     );
 
     if (reply && reply.trim() !== "OK") {
-      await sendReply(reply);
+      await sendReply(config.chatId, reply);
       lastProactiveDate = today;
       console.log("📤 Morning check sent");
     } else {
@@ -49,8 +43,8 @@ async function frostCheck(): Promise<void> {
   console.log("❄️ Running frost check...");
   try {
     // direct Open-Meteo call — no LLM tokens
-    const lat = 63.84;
-    const lon = 23.13;
+    const lat = config.latitude;
+    const lon = config.longitude;
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m&forecast_days=2&timezone=auto`;
 
     const response = await axios.get<{ hourly: OpenMeteoHourly }>(url, {
@@ -73,8 +67,14 @@ async function frostCheck(): Promise<void> {
     }
 
     if (hardFrost) {
+      const today = new Date().toISOString().split("T")[0];
+      if (lastFrostAlertDate === today) {
+        console.log("⏭ Already sent frost alert today");
+        return;
+      }
       const msg = `🚨 FROST ALERT\n\nHard frost expected: ${minTemp}°C at ${minTime}\nProtect tender plants immediately!`;
-      await sendReply(msg);
+      await sendReply(config.chatId, msg);
+      lastFrostAlertDate = today;
       console.log(`🚨 Frost alert sent: ${minTemp}°C at ${minTime}`);
     } else {
       console.log(`✅ No frost risk (min: ${minTemp}°C)`);

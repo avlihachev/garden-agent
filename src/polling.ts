@@ -1,25 +1,8 @@
-import axios from "axios";
 import { config } from "./config.js";
-import { AgentMessage } from "./types.js";
 import { processMessage } from "./agent.js";
+import { fetchMessages, sendReply } from "./botApi.js";
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
-
-async function fetchMessages(): Promise<AgentMessage[]> {
-  const url = `${config.botUrl}/api/agent/messages?secret=${encodeURIComponent(config.agentSecret)}`;
-  const response = await axios.get<{ messages: AgentMessage[] }>(url, {
-    timeout: 10000,
-  });
-  return response.data.messages;
-}
-
-async function sendReply(chatId: number, text: string): Promise<void> {
-  await axios.post(
-    `${config.botUrl}/api/agent/reply`,
-    { secret: config.agentSecret, chatId, text, parseMode: null },
-    { timeout: 10000 }
-  );
-}
 
 async function pollOnce(): Promise<void> {
   const messages = await fetchMessages();
