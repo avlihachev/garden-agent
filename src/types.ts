@@ -7,9 +7,3 @@ export interface AgentMessage {
   caption?: string;
   timestamp: number;
 }
-
-export interface BotReply {
-  chatId: number;
-  text: string;
-  parseMode?: "MarkdownV2" | "HTML" | null;
-}

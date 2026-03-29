@@ -23,7 +23,7 @@ async function pollOnce(): Promise<void> {
         await sendReply(msg.chatId, reply);
       }
     } catch (error) {
-      console.error(`Error processing message ${msg.id}:`, error);
+      console.error(`Error processing message ${msg.id}:`, error instanceof Error ? error.message : error);
       await sendReply(msg.chatId, "Произошла ошибка при обработке сообщения.");
     }
   }

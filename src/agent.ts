@@ -86,7 +86,7 @@ async function queryAgent(userInput: string, internalPrefix?: string): Promise<s
       allowedTools: ["Read", "Glob", "Grep", "mcp__garden-mcp__*"],
       cwd: config.skillDir,
       maxTurns: 10,
-      permissionMode: "default",
+      permissionMode: "acceptEdits",
     },
   })) {
     if ("result" in message) {
@@ -104,7 +104,10 @@ export async function processMessage(msg: AgentMessage): Promise<string> {
     }
     let photoPath: string | null = null;
     try {
-      photoPath = await savePhoto(msg.photoBase64);
+      photoPath = await savePhoto(msg.photoBase64).catch(() => null);
+      if (!photoPath) {
+        return "Ошибка: фото слишком большое.";
+      }
       const caption = msg.caption || "No caption provided";
       return await queryAgent(caption, `User sent a photo. Read the image at ${photoPath} and analyze it. Their caption:`);
     } finally {
