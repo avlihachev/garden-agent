@@ -7,3 +7,15 @@ export interface AgentMessage {
   caption?: string;
   timestamp: number;
 }
+
+export interface HistoryEntry {
+  role: "user" | "assistant";
+  text: string;
+  timestamp: number;
+}
+
+export interface HistoryData {
+  previousContext: string | null;
+  messages: HistoryEntry[];
+  lastSessionStart: number;
+}
