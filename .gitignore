@@ -2,5 +2,3 @@ node_modules/
 dist/
 .env
 
-# override global ignore
-!CLAUDE.md
