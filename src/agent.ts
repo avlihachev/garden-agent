@@ -6,13 +6,24 @@ import crypto from "crypto";
 import { config } from "./config.js";
 import { AgentMessage } from "./types.js";
 
-let skillPrompt: string | null = null;
+let systemPromptCache: string | null = null;
 
-async function getSkillPrompt(): Promise<string> {
-  if (skillPrompt) return skillPrompt;
+async function getSystemPrompt(): Promise<string> {
+  if (systemPromptCache) return systemPromptCache;
+
   const skillPath = join(config.skillDir, "SKILL.md");
-  skillPrompt = await readFile(skillPath, "utf-8");
-  return skillPrompt;
+  const profilePath = join(config.skillDir, "profile.md");
+
+  const [skill, profile] = await Promise.all([
+    readFile(skillPath, "utf-8"),
+    readFile(profilePath, "utf-8").catch(() => ""),
+  ]);
+
+  systemPromptCache = profile
+    ? `${skill}\n\n---\n\n# User Profile (preloaded)\n\n${profile}`
+    : skill;
+
+  return systemPromptCache;
 }
 
 async function savePhoto(base64: string): Promise<string> {
@@ -23,7 +34,7 @@ async function savePhoto(base64: string): Promise<string> {
 }
 
 async function runAgent(prompt: string): Promise<string> {
-  const systemPrompt = await getSkillPrompt();
+  const systemPrompt = await getSystemPrompt();
 
   let result = "";
   for await (const message of query({
