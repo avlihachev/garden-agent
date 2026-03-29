@@ -9,7 +9,6 @@ export interface AgentMessage {
 }
 
 export interface BotReply {
-  secret: string;
   chatId: number;
   text: string;
   parseMode?: "MarkdownV2" | "HTML" | null;

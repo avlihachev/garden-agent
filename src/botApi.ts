@@ -14,7 +14,10 @@ export async function fetchMessages(): Promise<AgentMessage[]> {
 export async function sendReply(chatId: number, text: string): Promise<void> {
   await axios.post(
     `${config.botUrl}/api/agent/reply`,
-    { secret: config.agentSecret, chatId, text, parseMode: null },
-    { timeout: 10000 }
+    { chatId, text, parseMode: null },
+    {
+      timeout: 10000,
+      headers: { Authorization: `Bearer ${config.agentSecret}` },
+    }
   );
 }
