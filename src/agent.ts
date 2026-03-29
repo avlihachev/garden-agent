@@ -61,15 +61,47 @@ async function runAgent(prompt: string): Promise<string> {
   return result;
 }
 
+async function queryAgent(userInput: string, internalPrefix?: string): Promise<string> {
+  const systemPrompt = await getSystemPrompt();
+  const wrappedPrompt = internalPrefix
+    ? `${internalPrefix}\n\n<user_message>\n${userInput}\n</user_message>`
+    : `<user_message>\n${userInput}\n</user_message>`;
+
+  let result = "";
+  for await (const message of query({
+    prompt: wrappedPrompt,
+    options: {
+      systemPrompt,
+      mcpServers: {
+        "garden-mcp": {
+          command: "node",
+          args: [config.mcpGardenPath],
+        },
+      },
+      allowedTools: ["Read", "Glob", "Grep", "mcp__garden-mcp__*"],
+      cwd: config.skillDir,
+      maxTurns: 10,
+      permissionMode: "default",
+    },
+  })) {
+    if ("result" in message) {
+      result = message.result;
+    }
+  }
+
+  return result;
+}
+
 export async function processMessage(msg: AgentMessage): Promise<string> {
   if (msg.type === "photo") {
+    if (!msg.photoBase64) {
+      return "Ошибка: фото не получено.";
+    }
     let photoPath: string | null = null;
     try {
-      photoPath = await savePhoto(msg.photoBase64!);
-      const prompt = msg.caption
-        ? `User sent a photo with caption: "${msg.caption}". Read the image at ${photoPath} and analyze it.`
-        : `User sent a photo. Read the image at ${photoPath} and analyze it.`;
-      return await runAgent(prompt);
+      photoPath = await savePhoto(msg.photoBase64);
+      const caption = msg.caption || "No caption provided";
+      return await queryAgent(caption, `User sent a photo. Read the image at ${photoPath} and analyze it. Their caption:`);
     } finally {
       if (photoPath) {
         await unlink(photoPath).catch(() => {});
@@ -77,7 +109,11 @@ export async function processMessage(msg: AgentMessage): Promise<string> {
     }
   }
 
-  return await runAgent(msg.text!);
+  if (!msg.text) {
+    return "Ошибка: пустое сообщение.";
+  }
+
+  return await queryAgent(msg.text);
 }
 
 export { runAgent };
