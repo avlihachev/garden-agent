@@ -26,7 +26,12 @@ async function getSystemPrompt(): Promise<string> {
   return systemPromptCache;
 }
 
+const MAX_PHOTO_BASE64_LENGTH = 10 * 1024 * 1024; // ~7.5MB decoded
+
 async function savePhoto(base64: string): Promise<string> {
+  if (base64.length > MAX_PHOTO_BASE64_LENGTH) {
+    throw new Error("Photo too large");
+  }
   const filename = `garden-photo-${crypto.randomUUID()}.jpg`;
   const filepath = join(tmpdir(), filename);
   await writeFile(filepath, Buffer.from(base64, "base64"));
