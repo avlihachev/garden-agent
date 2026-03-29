@@ -30,7 +30,7 @@ async function morningCheck(): Promise<void> {
       console.log("✅ Morning check: nothing critical");
     }
   } catch (error) {
-    console.error("Morning check error:", error);
+    console.error("Morning check error:", error instanceof Error ? error.message : error);
   }
 }
 
@@ -80,16 +80,16 @@ async function frostCheck(): Promise<void> {
       console.log(`✅ No frost risk (min: ${minTemp}°C)`);
     }
   } catch (error) {
-    console.error("Frost check error:", error);
+    console.error("Frost check error:", error instanceof Error ? error.message : error);
   }
 }
 
 export function startProactive(): void {
-  // morning check at 08:00
-  cron.schedule("0 8 * * *", morningCheck);
-  console.log("🌅 Morning check scheduled at 08:00");
+  const timezone = "Europe/Helsinki";
 
-  // frost check every 4 hours
-  cron.schedule("0 */4 * * *", frostCheck);
-  console.log("❄️ Frost check scheduled every 4 hours");
+  cron.schedule("0 8 * * *", morningCheck, { timezone });
+  console.log("🌅 Morning check scheduled at 08:00 " + timezone);
+
+  cron.schedule("0 */4 * * *", frostCheck, { timezone });
+  console.log("❄️ Frost check scheduled every 4 hours " + timezone);
 }
