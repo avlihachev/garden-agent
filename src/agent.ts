@@ -50,6 +50,10 @@ async function runAgent(prompt: string): Promise<string> {
         "garden-mcp": {
           command: "node",
           args: [config.mcpGardenPath],
+          env: {
+            SKILL_DIR: config.skillDir,
+            TASKS_FILE_PATH: config.tasksFilePath,
+          },
         },
       },
       allowedTools: ["Read", "Write", "Glob", "Grep", "mcp__garden-mcp__*"],
@@ -112,9 +116,13 @@ async function queryAgent(fullPrompt: string, internalPrefix?: string): Promise<
         "garden-mcp": {
           command: "node",
           args: [config.mcpGardenPath],
+          env: {
+            SKILL_DIR: config.skillDir,
+            TASKS_FILE_PATH: config.tasksFilePath,
+          },
         },
       },
-      allowedTools: ["Read", "Write", "Glob", "Grep", "mcp__garden-mcp__*"],
+      allowedTools: ["Read", "Glob", "Grep", "mcp__garden-mcp__*"],
       cwd: config.skillDir,
       maxTurns: 10,
       permissionMode: "acceptEdits",
