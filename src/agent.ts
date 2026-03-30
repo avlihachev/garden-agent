@@ -66,12 +66,43 @@ async function runAgent(prompt: string): Promise<string> {
   return result;
 }
 
+function logAgentMessage(message: any): void {
+  switch (message.type) {
+    case "assistant": {
+      const content = message.message?.content;
+      if (!Array.isArray(content)) break;
+      for (const block of content) {
+        if (block.type === "tool_use") {
+          const input = JSON.stringify(block.input);
+          const short = input.length > 120 ? input.slice(0, 120) + "…" : input;
+          console.log(`  🔧 ${block.name}(${short})`);
+        } else if (block.type === "text" && block.text) {
+          const preview = block.text.slice(0, 150).replace(/\n/g, " ");
+          console.log(`  💬 ${preview}${block.text.length > 150 ? "…" : ""}`);
+        }
+      }
+      if (message.error) {
+        console.log(`  ⚠️ assistant error: ${message.error}`);
+      }
+      break;
+    }
+    case "result":
+      if (message.subtype === "success") {
+        console.log(`  ✅ Done in ${message.num_turns} turns, $${message.total_cost_usd.toFixed(4)}`);
+      } else {
+        console.log(`  ❌ ${message.subtype}: ${message.errors?.join(", ") || "unknown"}`);
+      }
+      break;
+  }
+}
+
 async function queryAgent(fullPrompt: string, internalPrefix?: string): Promise<string> {
   const systemPrompt = await getSystemPrompt();
   const wrappedPrompt = internalPrefix
     ? `${internalPrefix}\n\n${fullPrompt}`
     : fullPrompt;
 
+  console.log("🤖 Agent processing...");
   let result = "";
   for await (const message of query({
     prompt: wrappedPrompt,
@@ -89,6 +120,7 @@ async function queryAgent(fullPrompt: string, internalPrefix?: string): Promise<
       permissionMode: "acceptEdits",
     },
   })) {
+    logAgentMessage(message);
     if ("result" in message) {
       result = message.result;
     }
