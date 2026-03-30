@@ -160,7 +160,5 @@ export class HistoryService {
     journalPath: string,
   ): Promise<void> {
     await this.rotate(0, summarize, journalPath);
-    this.data.messages = [];
-    await this.save();
   }
 }

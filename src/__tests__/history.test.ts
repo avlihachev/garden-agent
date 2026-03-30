@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { readFile, rm, mkdir } from "fs/promises";
+import { readFile, writeFile, rm, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import crypto from "crypto";
@@ -222,6 +222,89 @@ describe("HistoryService", () => {
       const result = HistoryService.formatForSummary(messages);
       expect(result).toContain("[user] how is chili?");
       expect(result).toContain("[assistant] needs pricking out");
+    });
+  });
+
+  describe("rotate", () => {
+    const mockSummarize = async (text: string) => `Summary of: ${text.slice(0, 20)}`;
+
+    it("summarizes old messages and retains recent ones", async () => {
+      await svc.load();
+      for (let i = 0; i < 6; i++) {
+        svc.addMessage("user", `msg-${i}-` + "x".repeat(40));
+        svc.addMessage("assistant", `reply-${i}-` + "y".repeat(40));
+      }
+
+      const journalPath = join(dir, "journal.md");
+      await writeFile(journalPath, "# Garden Journal\n");
+
+      await svc.rotate(30, mockSummarize, journalPath);
+
+      // recent messages retained
+      expect(svc.data.messages.length).toBeGreaterThan(0);
+      expect(svc.data.messages.length).toBeLessThan(12);
+
+      // previousContext set
+      expect(svc.data.previousContext).toBeTruthy();
+      expect(svc.data.previousContext).toContain("Summary of:");
+
+      // journal updated
+      const journal = await readFile(journalPath, "utf-8");
+      expect(journal).toContain("### Conversation summary");
+      expect(journal).toContain("Summary of:");
+
+      // history.json saved
+      const raw = await readFile(join(dir, "history.json"), "utf-8");
+      const saved = JSON.parse(raw) as HistoryData;
+      expect(saved.messages.length).toBe(svc.data.messages.length);
+    });
+
+    it("does nothing when messages are empty", async () => {
+      await svc.load();
+      const journalPath = join(dir, "journal.md");
+      await writeFile(journalPath, "# Garden Journal\n");
+
+      await svc.rotate(100, mockSummarize, journalPath);
+
+      expect(svc.data.previousContext).toBeNull();
+      expect(svc.data.messages).toEqual([]);
+    });
+
+    it("appends to existing date heading in journal", async () => {
+      await svc.load();
+      svc.addMessage("user", "x".repeat(100));
+      svc.addMessage("assistant", "y".repeat(100));
+
+      const today = new Date().toISOString().split("T")[0];
+      const journalPath = join(dir, "journal.md");
+      await writeFile(journalPath, `# Garden Journal\n\n## ${today}\n- Existing entry\n`);
+
+      await svc.rotate(0, mockSummarize, journalPath);
+
+      const journal = await readFile(journalPath, "utf-8");
+      expect(journal).toContain("Existing entry");
+      expect(journal).toContain("### Conversation summary");
+    });
+  });
+
+  describe("clear", () => {
+    const mockSummarize = async (text: string) => `Cleared: ${text.slice(0, 20)}`;
+
+    it("summarizes all messages and empties history", async () => {
+      await svc.load();
+      svc.addMessage("user", "hello");
+      svc.addMessage("assistant", "world");
+
+      const journalPath = join(dir, "journal.md");
+      await writeFile(journalPath, "# Garden Journal\n");
+
+      await svc.clear(mockSummarize, journalPath);
+
+      expect(svc.data.messages).toEqual([]);
+      expect(svc.data.previousContext).toContain("Cleared:");
+
+      const journal = await readFile(journalPath, "utf-8");
+      expect(journal).toContain("### Conversation summary");
     });
   });
 });

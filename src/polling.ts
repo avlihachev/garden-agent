@@ -95,12 +95,12 @@ async function pollOnce(): Promise<void> {
       const reply = await processMessage(msg, promptContext);
 
       if (reply) {
-        // save exchange to history
+        await sendReply(msg.chatId, reply);
+
+        // save after successful delivery
         history.addMessage("user", userText);
         history.addMessage("assistant", reply);
         await history.save();
-
-        await sendReply(msg.chatId, reply);
       }
     } catch (error) {
       console.error(`Error processing message ${msg.id}:`, error instanceof Error ? error.message : error);
