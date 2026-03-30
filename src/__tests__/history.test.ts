@@ -186,4 +186,42 @@ describe("HistoryService", () => {
       expect(taskIdx).toBeLessThan(msgIdx);
     });
   });
+
+  describe("splitForRotation", () => {
+    it("splits messages keeping retainTokens worth at the end", async () => {
+      await svc.load();
+      // each message: 40 chars = 10 tokens
+      for (let i = 0; i < 10; i++) {
+        svc.addMessage("user", "x".repeat(40));
+        svc.addMessage("assistant", "y".repeat(40));
+      }
+      // total: 20 messages * 10 tokens = 200 tokens
+      // retain 50 tokens = last 5 messages
+      const [old, recent] = svc.splitForRotation(50);
+      expect(recent.length).toBe(5);
+      expect(old.length).toBe(15);
+    });
+
+    it("returns all messages as old when retain is 0", async () => {
+      await svc.load();
+      svc.addMessage("user", "a".repeat(40));
+      svc.addMessage("assistant", "b".repeat(40));
+      const [old, recent] = svc.splitForRotation(0);
+      expect(old.length).toBe(2);
+      expect(recent.length).toBe(0);
+    });
+  });
+
+  describe("formatForSummary", () => {
+    it("formats messages as conversation text", async () => {
+      await svc.load();
+      const messages: HistoryEntry[] = [
+        { role: "user", text: "how is chili?", timestamp: 1000 },
+        { role: "assistant", text: "needs pricking out", timestamp: 2000 },
+      ];
+      const result = HistoryService.formatForSummary(messages);
+      expect(result).toContain("[user] how is chili?");
+      expect(result).toContain("[assistant] needs pricking out");
+    });
+  });
 });

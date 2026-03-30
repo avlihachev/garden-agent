@@ -73,4 +73,28 @@ export class HistoryService {
 
     return parts.join("\n\n");
   }
+
+  splitForRotation(retainTokens: number): [HistoryEntry[], HistoryEntry[]] {
+    if (retainTokens <= 0) {
+      return [this.data.messages.slice(), []];
+    }
+
+    let retainCount = 0;
+    let tokenCount = 0;
+    for (let i = this.data.messages.length - 1; i >= 0; i--) {
+      tokenCount += Math.ceil(this.data.messages[i].text.length / 4);
+      if (tokenCount > retainTokens) break;
+      retainCount++;
+    }
+
+    const splitIdx = this.data.messages.length - retainCount;
+    return [
+      this.data.messages.slice(0, splitIdx),
+      this.data.messages.slice(splitIdx),
+    ];
+  }
+
+  static formatForSummary(messages: HistoryEntry[]): string {
+    return messages.map((m) => `[${m.role}] ${m.text}`).join("\n");
+  }
 }
