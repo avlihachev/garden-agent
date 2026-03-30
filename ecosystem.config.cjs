@@ -2,7 +2,7 @@ module.exports = {
   apps: [{
     name: "garden-agent",
     script: "dist/index.js",
-    cwd: "/Users/lihachev/Projects/garden-agent",
+    cwd: __dirname,
     autorestart: true,
     max_restarts: 10,
     min_uptime: "10s",
