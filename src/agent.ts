@@ -66,11 +66,11 @@ async function runAgent(prompt: string): Promise<string> {
   return result;
 }
 
-async function queryAgent(userInput: string, internalPrefix?: string): Promise<string> {
+async function queryAgent(fullPrompt: string, internalPrefix?: string): Promise<string> {
   const systemPrompt = await getSystemPrompt();
   const wrappedPrompt = internalPrefix
-    ? `${internalPrefix}\n\n<user_message>\n${userInput}\n</user_message>`
-    : `<user_message>\n${userInput}\n</user_message>`;
+    ? `${internalPrefix}\n\n${fullPrompt}`
+    : fullPrompt;
 
   let result = "";
   for await (const message of query({
@@ -83,7 +83,7 @@ async function queryAgent(userInput: string, internalPrefix?: string): Promise<s
           args: [config.mcpGardenPath],
         },
       },
-      allowedTools: ["Read", "Glob", "Grep", "mcp__garden-mcp__*"],
+      allowedTools: ["Read", "Write", "Glob", "Grep", "mcp__garden-mcp__*"],
       cwd: config.skillDir,
       maxTurns: 10,
       permissionMode: "acceptEdits",
@@ -117,7 +117,7 @@ export async function summarizeConversation(conversationText: string): Promise<s
   return result;
 }
 
-export async function processMessage(msg: AgentMessage): Promise<string> {
+export async function processMessage(msg: AgentMessage, promptContext?: string): Promise<string> {
   if (msg.type === "photo") {
     if (!msg.photoBase64) {
       return "Ошибка: фото не получено.";
@@ -129,7 +129,11 @@ export async function processMessage(msg: AgentMessage): Promise<string> {
         return "Ошибка: фото слишком большое.";
       }
       const caption = msg.caption || "No caption provided";
-      return await queryAgent(caption, `User sent a photo. Read the image at ${photoPath} and analyze it. Their caption:`);
+      const photoPrompt = promptContext || `<user_message>\n${caption}\n</user_message>`;
+      return await queryAgent(
+        photoPrompt,
+        `User sent a photo. Read the image at ${photoPath} and analyze it. Their caption:`
+      );
     } finally {
       if (photoPath) {
         await unlink(photoPath).catch(() => {});
@@ -141,7 +145,8 @@ export async function processMessage(msg: AgentMessage): Promise<string> {
     return "Ошибка: пустое сообщение.";
   }
 
-  return await queryAgent(msg.text);
+  const prompt = promptContext || `<user_message>\n${msg.text}\n</user_message>`;
+  return await queryAgent(prompt);
 }
 
 export { runAgent };
