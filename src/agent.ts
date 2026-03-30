@@ -97,6 +97,26 @@ async function queryAgent(userInput: string, internalPrefix?: string): Promise<s
   return result;
 }
 
+export async function summarizeConversation(conversationText: string): Promise<string> {
+  const systemPrompt = "You are a helpful assistant that summarizes garden conversations.";
+
+  let result = "";
+  for await (const message of query({
+    prompt: `Summarize this conversation. Extract: key decisions made, actions taken, important observations about plants, open questions. Be concise, max 500 words. Write in the same language the user used.\n\n<conversation>\n${conversationText}\n</conversation>`,
+    options: {
+      systemPrompt,
+      maxTurns: 1,
+      permissionMode: "acceptEdits",
+    },
+  })) {
+    if ("result" in message) {
+      result = message.result;
+    }
+  }
+
+  return result;
+}
+
 export async function processMessage(msg: AgentMessage): Promise<string> {
   if (msg.type === "photo") {
     if (!msg.photoBase64) {
