@@ -5,7 +5,7 @@ import { AgentMessage } from "./types.js";
 export async function fetchMessages(): Promise<AgentMessage[]> {
   const url = `${config.botUrl}/api/agent/messages`;
   const response = await axios.get<{ messages: AgentMessage[] }>(url, {
-    timeout: 10000,
+    timeout: config.requestTimeoutMs,
     headers: { Authorization: `Bearer ${config.agentSecret}` },
   });
   return response.data.messages;
@@ -16,7 +16,7 @@ export async function sendReply(chatId: number, text: string): Promise<void> {
     `${config.botUrl}/api/agent/reply`,
     { chatId, text, parseMode: null },
     {
-      timeout: 10000,
+      timeout: config.requestTimeoutMs,
       headers: { Authorization: `Bearer ${config.agentSecret}` },
     }
   );
