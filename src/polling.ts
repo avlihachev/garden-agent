@@ -115,11 +115,12 @@ export function startPolling(): void {
   const poll = async () => {
     try {
       await pollOnce();
-    } catch (error: any) {
-      if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND" || error.code === "ECONNABORTED") {
+    } catch (error: unknown) {
+      const code = error instanceof Error ? (error as any).code : undefined;
+      if (code === "ECONNREFUSED" || code === "ENOTFOUND" || code === "ECONNABORTED") {
         // bot unreachable — silent retry
       } else {
-        console.error("Poll error:", error.message);
+        console.error("Poll error:", error instanceof Error ? error.message : String(error));
       }
     }
   };

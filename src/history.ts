@@ -15,7 +15,14 @@ export class HistoryService {
   async load(): Promise<void> {
     try {
       const raw = await readFile(this.filePath, "utf-8");
-      this.data = JSON.parse(raw) as HistoryData;
+      const parsed = JSON.parse(raw);
+      if (
+        !Array.isArray(parsed?.messages) ||
+        typeof parsed.lastSessionStart !== "number"
+      ) {
+        throw new Error("invalid structure");
+      }
+      this.data = parsed as HistoryData;
     } catch {
       this.data = { ...EMPTY_DATA, messages: [] };
     }
@@ -69,7 +76,8 @@ export class HistoryService {
       parts.push(`<current_tasks>\n${currentTasks}\n</current_tasks>`);
     }
 
-    parts.push(`<user_message>\n${userMessage}\n</user_message>`);
+    const sanitized = userMessage.replace(/<\/user_message>/gi, "&lt;/user_message>");
+    parts.push(`<user_message>\n${sanitized}\n</user_message>`);
 
     return parts.join("\n\n");
   }

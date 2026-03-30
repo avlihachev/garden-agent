@@ -146,6 +146,7 @@ export async function summarizeConversation(conversationText: string): Promise<s
     options: {
       systemPrompt,
       maxTurns: 1,
+      allowedTools: [],
       permissionMode: "acceptEdits",
     },
   })) {
