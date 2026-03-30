@@ -122,4 +122,68 @@ describe("HistoryService", () => {
       expect(svc.isNewSession(86400000)).toBe(true);
     });
   });
+
+  describe("buildPromptContext", () => {
+    it("returns just user_message for empty history", async () => {
+      await svc.load();
+      const result = svc.buildPromptContext("hello", null);
+      expect(result).toBe("<user_message>\nhello\n</user_message>");
+    });
+
+    it("includes conversation_history when messages exist", async () => {
+      await svc.load();
+      svc.addMessage("user", "first");
+      svc.addMessage("assistant", "reply");
+      const result = svc.buildPromptContext("second", null);
+      expect(result).toContain("<conversation_history>");
+      expect(result).toContain("[user] first");
+      expect(result).toContain("[assistant] reply");
+      expect(result).toContain("</conversation_history>");
+      expect(result).toContain("<user_message>\nsecond\n</user_message>");
+    });
+
+    it("includes previous_context when set", async () => {
+      await svc.load();
+      svc.data.previousContext = "summary of old chat";
+      const result = svc.buildPromptContext("hi", null);
+      expect(result).toContain("<previous_context>");
+      expect(result).toContain("summary of old chat");
+      expect(result).toContain("</previous_context>");
+    });
+
+    it("includes current_tasks when provided", async () => {
+      await svc.load();
+      const tasks = "- [ ] Water tomatoes\n- [x] Prune apple";
+      const result = svc.buildPromptContext("what's next?", tasks);
+      expect(result).toContain("<current_tasks>");
+      expect(result).toContain("Water tomatoes");
+      expect(result).toContain("</current_tasks>");
+    });
+
+    it("omits empty sections", async () => {
+      await svc.load();
+      const result = svc.buildPromptContext("hi", null);
+      expect(result).not.toContain("<previous_context>");
+      expect(result).not.toContain("<conversation_history>");
+      expect(result).not.toContain("<current_tasks>");
+    });
+
+    it("preserves section order: context, history, tasks, message", async () => {
+      await svc.load();
+      svc.data.previousContext = "ctx";
+      svc.addMessage("user", "old");
+      svc.addMessage("assistant", "old reply");
+      const tasks = "task list";
+      const result = svc.buildPromptContext("new msg", tasks);
+
+      const ctxIdx = result.indexOf("<previous_context>");
+      const histIdx = result.indexOf("<conversation_history>");
+      const taskIdx = result.indexOf("<current_tasks>");
+      const msgIdx = result.indexOf("<user_message>");
+
+      expect(ctxIdx).toBeLessThan(histIdx);
+      expect(histIdx).toBeLessThan(taskIdx);
+      expect(taskIdx).toBeLessThan(msgIdx);
+    });
+  });
 });

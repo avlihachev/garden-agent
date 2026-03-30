@@ -46,4 +46,31 @@ export class HistoryService {
     const lastDate = new Date(last).toDateString();
     return nowDate !== lastDate;
   }
+
+  buildPromptContext(userMessage: string, currentTasks: string | null): string {
+    const parts: string[] = [];
+
+    if (this.data.previousContext) {
+      parts.push(
+        `<previous_context>\n${this.data.previousContext}\n</previous_context>`
+      );
+    }
+
+    if (this.data.messages.length > 0) {
+      const lines = this.data.messages.map(
+        (m) => `[${m.role}] ${m.text}`
+      );
+      parts.push(
+        `<conversation_history>\n${lines.join("\n")}\n</conversation_history>`
+      );
+    }
+
+    if (currentTasks) {
+      parts.push(`<current_tasks>\n${currentTasks}\n</current_tasks>`);
+    }
+
+    parts.push(`<user_message>\n${userMessage}\n</user_message>`);
+
+    return parts.join("\n\n");
+  }
 }
