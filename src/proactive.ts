@@ -16,9 +16,13 @@ async function morningCheck(): Promise<void> {
 
   console.log("🌅 Running morning check...");
   try {
+    const tasksInstruction = config.tasksFilePath
+      ? ` Also read the tasks file at ${config.tasksFilePath} — review all sections including overdue items, upcoming deadlines, and "Questions to discuss" (process all information there and provide recommendations).`
+      : "";
     const reply = await runAgent(
-      "Check weather forecast for the next 7 days, seasonal calendar, and plant statuses. " +
-      "Report ONLY critical items that need immediate attention: frost risk, overdue tasks, " +
+      "Check weather forecast for the next 7 days, seasonal calendar, and plant statuses." +
+      tasksInstruction +
+      " Report ONLY critical items that need immediate attention: frost risk, overdue tasks, " +
       "or time-sensitive actions. If everything is fine, respond with exactly: OK"
     );
 
@@ -72,7 +76,9 @@ async function frostCheck(): Promise<void> {
         console.log("⏭ Already sent frost alert today");
         return;
       }
-      const msg = `🚨 FROST ALERT\n\nHard frost expected: ${minTemp}°C at ${minTime}\nProtect tender plants immediately!`;
+      const d = new Date(minTime);
+      const formatted = `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      const msg = `🚨 FROST ALERT\n\nHard frost expected: ${minTemp}°C at ${formatted}\nProtect tender plants immediately!`;
       await sendReply(config.chatId, msg);
       lastFrostAlertDate = today;
       console.log(`🚨 Frost alert sent: ${minTemp}°C at ${minTime}`);

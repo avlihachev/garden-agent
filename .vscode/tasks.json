@@ -25,6 +25,13 @@
       "type": "shell",
       "command": "npm run typecheck",
       "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "Restart Garden Agent (pm2)",
+      "type": "shell",
+      "command": "npm run build && pm2 restart garden-agent",
+      "problemMatcher": ["$tsc"],
+      "group": "build"
     }
   ]
 }

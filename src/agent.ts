@@ -19,9 +19,11 @@ async function getSystemPrompt(): Promise<string> {
     readFile(profilePath, "utf-8").catch(() => ""),
   ]);
 
+  const toolNote = `\n\n---\n\n# Tool Instructions\n\nTo update garden files use the MCP tool \`garden_write\` with file parameter: "plants", "journal", "profile", or "tasks". Do NOT use Write or Edit tools — they are not available. Always Read the file first, then garden_write with full updated content.`;
+
   systemPromptCache = profile
-    ? `${skill}\n\n---\n\n# User Profile (preloaded)\n\n${profile}`
-    : skill;
+    ? `${skill}\n\n---\n\n# User Profile (preloaded)\n\n${profile}${toolNote}`
+    : `${skill}${toolNote}`;
 
   return systemPromptCache;
 }
