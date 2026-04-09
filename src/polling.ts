@@ -105,7 +105,7 @@ async function pollOnce(): Promise<void> {
         // sync garden data to bot dashboard (with timeline)
         computeTimeline()
           .then((dashboard) => syncGardenData(dashboard))
-          .catch(() => {});
+          .catch((err) => console.error("Sync with timeline failed:", err instanceof Error ? err.message : err));
       }
     } catch (error) {
       console.error(`Error processing message ${msg.id}:`, error instanceof Error ? error.message : error);
@@ -120,7 +120,7 @@ export function startPolling(): void {
   // initial sync on startup (with timeline)
   computeTimeline()
     .then((dashboard) => syncGardenData(dashboard))
-    .catch(() => {});
+    .catch((err) => console.error("Initial sync with timeline failed:", err instanceof Error ? err.message : err));
 
   const poll = async () => {
     try {
