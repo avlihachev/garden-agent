@@ -19,3 +19,25 @@ export interface HistoryData {
   messages: HistoryEntry[];
   lastSessionStart: number;
 }
+
+export interface TimelineStage {
+  name: string;
+  start: string;
+  end: string;
+}
+
+export interface TimelineEntry {
+  plant: string;
+  stages: TimelineStage[];
+}
+
+export interface CalendarEvent {
+  date: string;
+  type: string;
+  title: string;
+}
+
+export interface DashboardData {
+  timeline: TimelineEntry[];
+  calendar: CalendarEvent[];
+}

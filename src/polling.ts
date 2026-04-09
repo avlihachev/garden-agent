@@ -1,8 +1,8 @@
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { config } from "./config.js";
-import { processMessage, summarizeConversation } from "./agent.js";
-import { fetchMessages, sendReply } from "./botApi.js";
+import { processMessage, summarizeConversation, computeTimeline } from "./agent.js";
+import { fetchMessages, sendReply, syncGardenData } from "./botApi.js";
 import { HistoryService } from "./history.js";
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
@@ -101,6 +101,11 @@ async function pollOnce(): Promise<void> {
         history.addMessage("user", userText);
         history.addMessage("assistant", reply);
         await history.save();
+
+        // sync garden data to bot dashboard (with timeline)
+        computeTimeline()
+          .then((dashboard) => syncGardenData(dashboard))
+          .catch(() => {});
       }
     } catch (error) {
       console.error(`Error processing message ${msg.id}:`, error instanceof Error ? error.message : error);
@@ -111,6 +116,11 @@ async function pollOnce(): Promise<void> {
 
 export function startPolling(): void {
   console.log(`🔄 Polling every ${config.pollIntervalMs}ms`);
+
+  // initial sync on startup (with timeline)
+  computeTimeline()
+    .then((dashboard) => syncGardenData(dashboard))
+    .catch(() => {});
 
   const poll = async () => {
     try {
