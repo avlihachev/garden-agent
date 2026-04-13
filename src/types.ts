@@ -41,3 +41,9 @@ export interface DashboardData {
   timeline: TimelineEntry[];
   calendar: CalendarEvent[];
 }
+
+export interface TaskUpdate {
+  taskLine: string;
+  done: boolean;
+  timestamp: number;
+}

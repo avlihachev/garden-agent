@@ -18,7 +18,8 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.86",
     "axios": "^1.7.0",
     "dotenv": "^16.4.0",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "sharp": "^0.33.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -2,7 +2,7 @@ import axios from "axios";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { config } from "./config.js";
-import { AgentMessage, DashboardData } from "./types.js";
+import { AgentMessage, DashboardData, TaskUpdate } from "./types.js";
 
 export async function fetchMessages(): Promise<AgentMessage[]> {
   const url = `${config.botUrl}/api/agent/messages`;
@@ -71,4 +71,17 @@ export async function syncGardenData(dashboard?: DashboardData | null): Promise<
       headers: { Authorization: `Bearer ${config.agentSecret}` },
     }
   );
+}
+
+export async function fetchTaskUpdates(): Promise<TaskUpdate[]> {
+  try {
+    const url = `${config.botUrl}/api/agent/task-updates`;
+    const response = await axios.get<{ updates: TaskUpdate[] }>(url, {
+      timeout: config.requestTimeoutMs,
+      headers: { Authorization: `Bearer ${config.agentSecret}` },
+    });
+    return response.data.updates;
+  } catch {
+    return [];
+  }
 }

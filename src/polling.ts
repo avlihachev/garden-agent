@@ -2,7 +2,8 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 import { config } from "./config.js";
 import { processMessage, summarizeConversation, computeTimeline } from "./agent.js";
-import { fetchMessages, sendReply, syncGardenData } from "./botApi.js";
+import { fetchMessages, sendReply, syncGardenData, fetchTaskUpdates } from "./botApi.js";
+import { applyTaskUpdate } from "./tasks.js";
 import { HistoryService } from "./history.js";
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
@@ -48,8 +49,34 @@ async function maybeRotate(): Promise<void> {
   }
 }
 
+async function processTaskUpdates(): Promise<void> {
+  if (!config.tasksFilePath) return;
+
+  const updates = await fetchTaskUpdates();
+  if (updates.length === 0) return;
+
+  console.log(`📋 Received ${updates.length} task update(s)`);
+  let changed = false;
+
+  for (const update of updates) {
+    const applied = await applyTaskUpdate(config.tasksFilePath, update.taskLine, update.done);
+    if (applied) {
+      console.log(`✅ Task ${update.done ? "completed" : "reopened"}: ${update.taskLine.slice(0, 50)}`);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    syncGardenData()
+      .catch((err) => console.error("Sync after task update failed:", err instanceof Error ? err.message : err));
+  }
+}
+
 async function pollOnce(): Promise<void> {
   const messages = await fetchMessages();
+
+  await processTaskUpdates();
+
   if (messages.length === 0) return;
 
   await ensureHistoryLoaded();
