@@ -49,7 +49,7 @@ async function frostCheck(): Promise<void> {
     // direct Open-Meteo call — no LLM tokens
     const lat = config.latitude;
     const lon = config.longitude;
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m&forecast_days=2&timezone=auto`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m&forecast_days=2&timezone=auto&models=metno_seamless`;
 
     const response = await axios.get<{ hourly: OpenMeteoHourly }>(url, {
       timeout: 10000,
