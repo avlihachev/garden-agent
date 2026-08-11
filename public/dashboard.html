@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Garden</title>
+<style>
+  :root { --accent:#2e7d32; --muted:#777; --line:#e0e0e0; }
+  body { font: 15px/1.5 -apple-system, system-ui, sans-serif; margin: 24px; color: #222; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; max-width: 1100px; }
+  h1 { font-size: 20px; } h2 { font-size: 13px; text-transform: uppercase; color: var(--muted); letter-spacing: .06em; margin: 20px 0 8px; }
+  .task, .plant { padding: 8px 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .task.overdue .win { color: #c62828; }
+  .win { color: var(--muted); font-size: 12px; margin-left: 8px; }
+  .thread { margin: 6px 0 4px 26px; font-size: 13px; color: #444; }
+  .thread .me { color: var(--accent); }
+  .done { color: var(--muted); text-decoration: line-through; }
+  input[type=text] { width: 90%; padding: 4px 6px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<h1>🌱 Garden</h1>
+<main>
+  <section id="tasks"></section>
+  <section id="plants"></section>
+</main>
+<script>
+const today = new Date().toISOString().split("T")[0];
+async function load() {
+  const state = await (await fetch("/api/state")).json();
+  renderTasks(state.tasks);
+  renderPlants(state.plants);
+}
+function groupOf(t) {
+  if (t.status !== "open") return "done";
+  if (!t.dueStart) return "someday";
+  if (t.dueEnd < today) return "overdue";
+  if (t.dueStart <= today) return "today";
+  const week = new Date(Date.now() + 7 * 864e5).toISOString().split("T")[0];
+  return t.dueStart <= week ? "week" : "later";
+}
+async function closeTask(id) {
+  await fetch(`/api/tasks/${id}`, { method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ status: "done" }) });
+  load();
+}
+async function addNote(id, text) {
+  await fetch(`/api/tasks/${id}/notes`, { method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }) });
+  load();
+}
+
+const GROUP_LABELS = { overdue: "Overdue", today: "Today", week: "This week", later: "Later", someday: "Someday", done: "Done" };
+const GROUP_ORDER = ["overdue", "today", "week", "later", "someday", "done"];
+
+function fmtWindow(t) {
+  if (!t.dueStart) return "";
+  return t.dueStart === t.dueEnd ? t.dueStart : `${t.dueStart} → ${t.dueEnd}`;
+}
+
+function renderNoteLine(note) {
+  const line = document.createElement("div");
+  const author = document.createElement("span");
+  if (note.author === "me") author.className = "me";
+  author.textContent = `${note.author}: `;
+  line.appendChild(author);
+  line.appendChild(document.createTextNode(note.text));
+  return line;
+}
+
+function renderTaskThread(task) {
+  const thread = document.createElement("div");
+  thread.className = "thread";
+  thread.hidden = true;
+  for (const note of task.notes) thread.appendChild(renderNoteLine(note));
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "add a note…";
+  input.addEventListener("click", (e) => e.stopPropagation());
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    addNote(task.id, text);
+  });
+  thread.appendChild(input);
+  return thread;
+}
+
+function renderTaskRow(task, group) {
+  const wrap = document.createElement("div");
+
+  const row = document.createElement("div");
+  row.className = "task" + (group === "overdue" ? " overdue" : "");
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = task.status !== "open";
+  checkbox.disabled = task.status !== "open";
+  checkbox.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (task.status === "open") closeTask(task.id);
+  });
+
+  const title = document.createElement("span");
+  title.textContent = ` ${task.title}`;
+  if (task.status !== "open") title.className = "done";
+
+  const win = document.createElement("span");
+  win.className = "win";
+  win.textContent = fmtWindow(task);
+
+  row.appendChild(checkbox);
+  row.appendChild(title);
+  row.appendChild(win);
+
+  const thread = renderTaskThread(task);
+  row.addEventListener("click", () => { thread.hidden = !thread.hidden; });
+
+  wrap.appendChild(row);
+  wrap.appendChild(thread);
+  return wrap;
+}
+
+function renderTasks(tasks) {
+  const el = document.getElementById("tasks");
+  el.textContent = "";
+
+  const heading = document.createElement("h1");
+  heading.textContent = "Tasks";
+  el.appendChild(heading);
+
+  const groups = Object.fromEntries(GROUP_ORDER.map((g) => [g, []]));
+  for (const task of tasks) groups[groupOf(task)].push(task);
+
+  for (const group of GROUP_ORDER) {
+    const items = groups[group];
+    if (!items.length) continue;
+    const h2 = document.createElement("h2");
+    h2.textContent = GROUP_LABELS[group];
+    el.appendChild(h2);
+    for (const task of items) el.appendChild(renderTaskRow(task, group));
+  }
+}
+
+function renderEventLine(event) {
+  const line = document.createElement("div");
+  const date = event.ts ? event.ts.split("T")[0] : "";
+  line.appendChild(document.createTextNode(`${date} — ${event.type}`));
+  if (event.note) line.appendChild(document.createTextNode(`: ${event.note}`));
+  return line;
+}
+
+function renderPlantCard(plant) {
+  const wrap = document.createElement("div");
+
+  const card = document.createElement("div");
+  card.className = "plant";
+
+  const name = document.createElement("strong");
+  name.textContent = plant.name;
+
+  const meta = document.createElement("span");
+  meta.className = "win";
+  meta.textContent = `${plant.kind}${plant.variety ? ` (${plant.variety})` : ""} · ${plant.status}`;
+
+  card.appendChild(name);
+  card.appendChild(document.createTextNode(" "));
+  card.appendChild(meta);
+
+  const timeline = document.createElement("div");
+  timeline.className = "thread";
+  timeline.hidden = true;
+  for (const event of plant.events) timeline.appendChild(renderEventLine(event));
+
+  card.addEventListener("click", () => { timeline.hidden = !timeline.hidden; });
+
+  wrap.appendChild(card);
+  wrap.appendChild(timeline);
+  return wrap;
+}
+
+function renderPlants(plants) {
+  const el = document.getElementById("plants");
+  el.textContent = "";
+
+  const heading = document.createElement("h1");
+  heading.textContent = "Plants";
+  el.appendChild(heading);
+
+  const byLocation = new Map();
+  for (const plant of plants) {
+    if (!byLocation.has(plant.location)) byLocation.set(plant.location, []);
+    byLocation.get(plant.location).push(plant);
+  }
+
+  for (const [location, items] of byLocation) {
+    const h2 = document.createElement("h2");
+    h2.textContent = location;
+    el.appendChild(h2);
+    for (const plant of items) el.appendChild(renderPlantCard(plant));
+  }
+}
+
+load();
+</script>
+</body>
+</html>
