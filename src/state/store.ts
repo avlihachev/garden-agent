@@ -93,8 +93,16 @@ export class GardenStore {
     const params: unknown[] = [];
     if (patch.title !== undefined) { sets.push("title = ?"); params.push(patch.title); }
     if (patch.details !== undefined) { sets.push("details = ?"); params.push(patch.details); }
+    // dueEnd follows dueStart when the caller only patches dueStart, keeping the
+    // due_end >= due_start invariant that addTask establishes on insert.
+    let dueEnd = patch.dueEnd;
+    if (patch.dueStart !== undefined && patch.dueEnd === undefined) {
+      dueEnd = patch.dueStart === null ? null
+        : (before.dueEnd === null || before.dueEnd < patch.dueStart) ? patch.dueStart
+        : before.dueEnd;
+    }
     if (patch.dueStart !== undefined) { sets.push("due_start = ?"); params.push(patch.dueStart); }
-    if (patch.dueEnd !== undefined) { sets.push("due_end = ?"); params.push(patch.dueEnd); }
+    if (dueEnd !== undefined) { sets.push("due_end = ?"); params.push(dueEnd); }
     if (patch.status !== undefined) {
       sets.push("status = ?"); params.push(patch.status);
       sets.push("completed_at = ?");
@@ -215,8 +223,11 @@ export class GardenStore {
       const plant = t.plantId ? ` (plant #${t.plantId})` : "";
       return `#${t.id} ${win} ${t.title}${plant}`;
     };
-    const overdue = open.filter(t => t.dueEnd && t.dueEnd < today);
-    const current = open.filter(t => t.dueStart && t.dueStart <= today && t.dueEnd! >= today);
+    // effective end falls back to dueStart so a task with dueStart set and dueEnd
+    // NULL still lands in a bucket instead of being silently dropped from all four.
+    const effectiveEnd = (t: Task) => t.dueEnd ?? t.dueStart;
+    const overdue = open.filter(t => t.dueStart && effectiveEnd(t)! < today);
+    const current = open.filter(t => t.dueStart && t.dueStart <= today && effectiveEnd(t)! >= today);
     const later = open.filter(t => t.dueStart && t.dueStart > today);
     const someday = open.filter(t => !t.dueStart);
     const sections: string[] = [];

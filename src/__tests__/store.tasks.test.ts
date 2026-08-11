@@ -62,4 +62,28 @@ describe("tasks", () => {
     const u = store.updateTask(t.id, { dueStart: null, dueEnd: null });
     expect(u.dueStart).toBeNull();
   });
+
+  it("patching dueStart alone on a someday task gives it a due_end and puts it in today's window", () => {
+    const t = store.addTask({ title: "someday" });
+    const u = store.updateTask(t.id, { dueStart: "2026-04-25" });
+    expect(u.dueEnd).toBe("2026-04-25");
+    const today = store.listTasks({ window: "today" }, "2026-04-25");
+    expect(today.map(x => x.title)).toEqual(["someday"]);
+    expect(store.formatOpenTasks("2026-04-25")).not.toBe("");
+  });
+
+  it("patching dueStart beyond the existing dueEnd does not leave the task permanently overdue", () => {
+    const t = store.addTask({ title: "y", dueStart: "2026-04-01", dueEnd: "2026-04-05" });
+    const u = store.updateTask(t.id, { dueStart: "2026-04-20" });
+    expect(u.dueEnd! >= u.dueStart!).toBe(true);
+    expect(store.listTasks({ window: "overdue" }, "2026-04-20")).toHaveLength(0);
+  });
+
+  it("reopening a task clears completedAt", () => {
+    const t = store.addTask({ title: "z" });
+    store.updateTask(t.id, { status: "done" });
+    const reopened = store.updateTask(t.id, { status: "open" });
+    expect(reopened.status).toBe("open");
+    expect(reopened.completedAt).toBeNull();
+  });
 });

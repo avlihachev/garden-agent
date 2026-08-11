@@ -10,6 +10,7 @@ startPolling();
 startProactive();
 
 startDashboard(store, config.dashboardPort)
-  .then(() => console.log(`📊 Dashboard: http://localhost:${config.dashboardPort}`));
+  .then(() => console.log(`📊 Dashboard: http://localhost:${config.dashboardPort}`))
+  .catch(err => console.error("Dashboard failed to start:", err.message));
 
 console.log("✅ Garden Agent running");

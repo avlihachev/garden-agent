@@ -52,6 +52,11 @@ describe("dashboard api", () => {
     expect(((await res.json()) as any).author).toBe("me");
   });
 
+  it("starting a second dashboard on the same port rejects instead of crashing", async () => {
+    const addr = server.address() as { port: number };
+    await expect(startDashboard(store, addr.port)).rejects.toThrow();
+  });
+
   it("404 on unknown task, 400 on bad json", async () => {
     const bad = await fetch(`${base}/api/tasks/999`, {
       method: "PATCH", headers: { "content-type": "application/json" },

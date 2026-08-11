@@ -58,7 +58,17 @@ export function startDashboard(store: GardenStore, port: number): Promise<Server
       else sendJson(res, 500, { error: msg });
     }
   });
-  return new Promise((resolve) => {
-    server.listen(port, "127.0.0.1", () => resolve(server));
+  return new Promise((resolve, reject) => {
+    let started = false;
+    // without this listener, EADDRINUSE (or any later socket error) is an
+    // unhandled 'error' event and takes the whole process down with it.
+    server.on("error", (err) => {
+      if (!started) reject(err);
+      else console.error("Dashboard server error:", err);
+    });
+    server.listen(port, "127.0.0.1", () => {
+      started = true;
+      resolve(server);
+    });
   });
 }
