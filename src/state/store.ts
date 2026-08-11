@@ -9,6 +9,13 @@ export interface Task {
 export interface TaskNote { id: number; taskId: number; ts: string; author: "me" | "agent"; text: string; }
 export type TaskWindow = "today" | "week" | "overdue" | "all";
 
+export interface Plant {
+  id: number; name: string; kind: string; variety: string | null; location: string;
+  status: "seed" | "seedling" | "planted" | "dormant" | "done";
+  sownAt: string | null; plantedOutAt: string | null; notes: string | null; createdAt: string;
+}
+export interface PlantEvent { id: number; plantId: number; ts: string; type: string; note: string | null; }
+
 function isoDate(d: Date): string { return d.toISOString().split("T")[0]; }
 function addDays(date: string, days: number): string {
   const d = new Date(date + "T00:00:00Z");
@@ -27,6 +34,14 @@ function rowToTask(r: any): Task {
     status: r.status, dueStart: r.due_start, dueEnd: r.due_end,
     recurrence: r.recurrence, source: r.source,
     createdAt: r.created_at, completedAt: r.completed_at,
+  };
+}
+
+function rowToPlant(r: any): Plant {
+  return {
+    id: r.id, name: r.name, kind: r.kind, variety: r.variety, location: r.location,
+    status: r.status, sownAt: r.sown_at, plantedOutAt: r.planted_out_at,
+    notes: r.notes, createdAt: r.created_at,
   };
 }
 
@@ -122,5 +137,93 @@ export class GardenStore {
   listTaskNotes(taskId: number): TaskNote[] {
     return (this.db.prepare("SELECT * FROM task_notes WHERE task_id = ? ORDER BY ts, id").all(taskId) as any[])
       .map(r => ({ id: r.id, taskId: r.task_id, ts: r.ts, author: r.author, text: r.text }));
+  }
+
+  addPlant(input: { name: string; kind: string; variety?: string; location: string;
+    status: Plant["status"]; sownAt?: string; notes?: string }): Plant {
+    const res = this.db.prepare(
+      `INSERT INTO plants (name, kind, variety, location, status, sown_at, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(input.name, input.kind, input.variety ?? null, input.location,
+      input.status, input.sownAt ?? null, input.notes ?? null, new Date().toISOString());
+    return this.getPlant(Number(res.lastInsertRowid));
+  }
+
+  getPlant(id: number): Plant {
+    const row = this.db.prepare("SELECT * FROM plants WHERE id = ?").get(id);
+    if (!row) throw new Error(`plant ${id} not found`);
+    return rowToPlant(row);
+  }
+
+  listPlants(filter: { status?: Plant["status"]; location?: string } = {}): Plant[] {
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (filter.status) { where.push("status = ?"); params.push(filter.status); }
+    if (filter.location) { where.push("location = ?"); params.push(filter.location); }
+    const sql = `SELECT * FROM plants${where.length ? " WHERE " + where.join(" AND ") : ""} ORDER BY location, name`;
+    return this.db.prepare(sql).all(...(params as any[])).map(rowToPlant);
+  }
+
+  updatePlant(id: number, patch: Partial<Pick<Plant, "name"|"kind"|"variety"|"location"|"status"|"sownAt"|"plantedOutAt"|"notes">>): Plant {
+    const cols: Record<string, string> = {
+      name: "name", kind: "kind", variety: "variety", location: "location",
+      status: "status", sownAt: "sown_at", plantedOutAt: "planted_out_at", notes: "notes",
+    };
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    for (const [k, col] of Object.entries(cols)) {
+      const v = (patch as any)[k];
+      if (v !== undefined) { sets.push(`${col} = ?`); params.push(v); }
+    }
+    if (sets.length) {
+      params.push(id);
+      this.db.prepare(`UPDATE plants SET ${sets.join(", ")} WHERE id = ?`).run(...(params as any[]));
+    }
+    return this.getPlant(id);
+  }
+
+  logPlantEvent(plantId: number, type: "sown"|"transplanted"|"harvested"|"treated"|"note", note?: string): PlantEvent {
+    const plant = this.getPlant(plantId);
+    const ts = new Date().toISOString();
+    const res = this.db.prepare(
+      "INSERT INTO plant_events (plant_id, ts, type, note) VALUES (?, ?, ?, ?)"
+    ).run(plantId, ts, type, note ?? null);
+    const today = ts.split("T")[0];
+    if (type === "sown" && !plant.sownAt) this.updatePlant(plantId, { sownAt: today });
+    if (type === "transplanted" && !plant.plantedOutAt) this.updatePlant(plantId, { plantedOutAt: today });
+    const row = this.db.prepare("SELECT * FROM plant_events WHERE id = ?").get(Number(res.lastInsertRowid)) as any;
+    return { id: row.id, plantId: row.plant_id, ts: row.ts, type: row.type, note: row.note };
+  }
+
+  listPlantEvents(plantId: number): PlantEvent[] {
+    return (this.db.prepare("SELECT * FROM plant_events WHERE plant_id = ? ORDER BY ts, id").all(plantId) as any[])
+      .map(r => ({ id: r.id, plantId: r.plant_id, ts: r.ts, type: r.type, note: r.note }));
+  }
+
+  dueSummary(today: string = new Date().toISOString().split("T")[0]): { overdue: Task[]; today: Task[] } {
+    return {
+      overdue: this.listTasks({ window: "overdue" }, today),
+      today: this.listTasks({ window: "today" }, today),
+    };
+  }
+
+  formatOpenTasks(today: string = new Date().toISOString().split("T")[0]): string {
+    const open = this.listTasks({ status: "open" }, today);
+    if (open.length === 0) return "No open tasks.";
+    const line = (t: Task) => {
+      const win = t.dueStart ? `[${t.dueStart}..${t.dueEnd}]` : "[someday]";
+      const plant = t.plantId ? ` (plant #${t.plantId})` : "";
+      return `#${t.id} ${win} ${t.title}${plant}`;
+    };
+    const overdue = open.filter(t => t.dueEnd && t.dueEnd < today);
+    const current = open.filter(t => t.dueStart && t.dueStart <= today && t.dueEnd! >= today);
+    const later = open.filter(t => t.dueStart && t.dueStart > today);
+    const someday = open.filter(t => !t.dueStart);
+    const sections: string[] = [];
+    if (overdue.length) sections.push("OVERDUE:\n" + overdue.map(line).join("\n"));
+    if (current.length) sections.push("CURRENT:\n" + current.map(line).join("\n"));
+    if (later.length) sections.push("LATER:\n" + later.map(line).join("\n"));
+    if (someday.length) sections.push("SOMEDAY:\n" + someday.map(line).join("\n"));
+    return sections.join("\n\n");
   }
 }
