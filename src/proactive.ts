@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import axios from "axios";
 import { config } from "./config.js";
-import { runAgent } from "./agent.js";
+import { runAgent, store } from "./agent.js";
 import { sendReply } from "./botApi.js";
 
 let lastProactiveDate: string = "";
@@ -16,14 +16,16 @@ async function morningCheck(): Promise<void> {
 
   console.log("🌅 Running morning check...");
   try {
-    const tasksInstruction = config.tasksBackend === "bear"
-      ? ` Also read the Bear note titled "${config.tasksBearTitle}"${config.tasksBearId ? ` (id: ${config.tasksBearId})` : ""} via mcp__bear__read_note_content (prefer addressing by id when available) — review all sections including overdue items, upcoming deadlines, and "Questions to discuss" (process all information there and provide recommendations).`
-      : config.tasksFilePath
-      ? ` Also read the tasks file at ${config.tasksFilePath} — review all sections including overdue items, upcoming deadlines, and "Questions to discuss" (process all information there and provide recommendations).`
-      : "";
+    const { overdue, today: dueToday } = store.dueSummary();
+    const taskLine = (t: { id: number; title: string; dueStart: string | null; dueEnd: string | null }) =>
+      `#${t.id} ${t.title}${t.dueStart ? ` [${t.dueStart}..${t.dueEnd}]` : ""}`;
+    const tasksBlock =
+      overdue.length || dueToday.length
+        ? `\n\nTasks from the database (already filtered, do not re-read them):\nOVERDUE:\n${overdue.map(taskLine).join("\n") || "-"}\nDUE TODAY:\n${dueToday.map(taskLine).join("\n") || "-"}`
+        : "\n\nNo overdue or due-today tasks in the database.";
     const reply = await runAgent(
       "Check weather forecast for the next 7 days, seasonal calendar, and plant statuses." +
-      tasksInstruction +
+      tasksBlock +
       " Report ONLY critical items that need immediate attention: frost risk, overdue tasks, " +
       "or time-sensitive actions. If everything is fine, respond with exactly: OK"
     );
