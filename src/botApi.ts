@@ -3,6 +3,7 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 import { config } from "./config.js";
 import { AgentMessage, DashboardData, TaskUpdate } from "./types.js";
+import { readTasks } from "./tasksBackend.js";
 
 export async function fetchMessages(): Promise<AgentMessage[]> {
   const url = `${config.botUrl}/api/agent/messages`;
@@ -45,15 +46,14 @@ async function fetchWeather(): Promise<Record<string, unknown> | undefined> {
 }
 
 export async function syncGardenData(dashboard?: DashboardData | null): Promise<void> {
-  const [plants, journal, profile, tasks, weather] = await Promise.all([
+  const [plants, journal, profile, tasksRaw, weather] = await Promise.all([
     readFile(join(config.skillDir, "plants.md"), "utf-8").catch(() => ""),
     readFile(join(config.skillDir, "journal.md"), "utf-8").catch(() => ""),
     readFile(join(config.skillDir, "profile.md"), "utf-8").catch(() => ""),
-    config.tasksFilePath
-      ? readFile(config.tasksFilePath, "utf-8").catch(() => undefined)
-      : Promise.resolve(undefined),
+    readTasks().catch(() => null),
     fetchWeather(),
   ]);
+  const tasks = tasksRaw ?? undefined;
 
   if (!plants && !journal && !profile) return;
 

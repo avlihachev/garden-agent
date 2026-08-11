@@ -1,9 +1,8 @@
-import { readFile } from "fs/promises";
 import { join } from "path";
 import { config } from "./config.js";
 import { processMessage, summarizeConversation, computeTimeline } from "./agent.js";
 import { fetchMessages, sendReply, syncGardenData, fetchTaskUpdates } from "./botApi.js";
-import { applyTaskUpdate } from "./tasks.js";
+import { applyTaskUpdate, readTasks } from "./tasksBackend.js";
 import { HistoryService } from "./history.js";
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
@@ -21,14 +20,6 @@ async function ensureHistoryLoaded(): Promise<void> {
   }
 }
 
-async function readTasksFile(): Promise<string | null> {
-  if (!config.tasksFilePath) return null;
-  try {
-    return await readFile(config.tasksFilePath, "utf-8");
-  } catch {
-    return null;
-  }
-}
 
 async function handleClear(chatId: number): Promise<void> {
   const journalPath = join(config.skillDir, "journal.md");
@@ -50,8 +41,6 @@ async function maybeRotate(): Promise<void> {
 }
 
 async function processTaskUpdates(): Promise<void> {
-  if (!config.tasksFilePath) return;
-
   const updates = await fetchTaskUpdates();
   if (updates.length === 0) return;
 
@@ -59,7 +48,7 @@ async function processTaskUpdates(): Promise<void> {
   let changed = false;
 
   for (const update of updates) {
-    const applied = await applyTaskUpdate(config.tasksFilePath, update.taskLine, update.done);
+    const applied = await applyTaskUpdate(update.taskLine, update.done);
     if (applied) {
       console.log(`✅ Task ${update.done ? "completed" : "reopened"}: ${update.taskLine.slice(0, 50)}`);
       changed = true;
@@ -107,7 +96,7 @@ async function pollOnce(): Promise<void> {
       // check if new session — load tasks
       let currentTasks: string | null = null;
       if (history.isNewSession(config.sessionTimeoutMs)) {
-        currentTasks = await readTasksFile();
+        currentTasks = await readTasks();
         history.data.lastSessionStart = Date.now();
         console.log("📋 New session — tasks loaded");
       }

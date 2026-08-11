@@ -16,7 +16,9 @@ async function morningCheck(): Promise<void> {
 
   console.log("🌅 Running morning check...");
   try {
-    const tasksInstruction = config.tasksFilePath
+    const tasksInstruction = config.tasksBackend === "bear"
+      ? ` Also read the Bear note titled "${config.tasksBearTitle}"${config.tasksBearId ? ` (id: ${config.tasksBearId})` : ""} via mcp__bear__read_note_content (prefer addressing by id when available) — review all sections including overdue items, upcoming deadlines, and "Questions to discuss" (process all information there and provide recommendations).`
+      : config.tasksFilePath
       ? ` Also read the tasks file at ${config.tasksFilePath} — review all sections including overdue items, upcoming deadlines, and "Questions to discuss" (process all information there and provide recommendations).`
       : "";
     const reply = await runAgent(
@@ -93,8 +95,9 @@ async function frostCheck(): Promise<void> {
 export function startProactive(): void {
   const timezone = "Europe/Helsinki";
 
-  cron.schedule("0 8 * * *", morningCheck, { timezone });
-  console.log("🌅 Morning check scheduled at 08:00 " + timezone);
+  // morning check disabled on request — keep frost check only
+  // cron.schedule("0 8 * * *", morningCheck, { timezone });
+  // console.log("🌅 Morning check scheduled at 08:00 " + timezone);
 
   cron.schedule("0 */4 * * *", frostCheck, { timezone });
   console.log("❄️ Frost check scheduled every 4 hours " + timezone);

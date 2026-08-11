@@ -20,7 +20,11 @@ async function getSystemPrompt(): Promise<string> {
     readFile(profilePath, "utf-8").catch(() => ""),
   ]);
 
-  const toolNote = `\n\n---\n\n# Tool Instructions\n\nTo update garden files use the MCP tool \`garden_write\` with file parameter: "plants", "journal", "profile", or "tasks". Do NOT use Write or Edit tools — they are not available. Always Read the file first, then garden_write with full updated content.`;
+  const tasksNote = config.tasksBackend === "bear"
+    ? `\n\nTasks live in the Bear note titled "${config.tasksBearTitle}"${config.tasksBearId ? ` (id: ${config.tasksBearId})` : ""} (tag #garden/tasks). Use Bear MCP tools for tasks: mcp__bear__read_note_content to read, mcp__bear__edit_note for targeted edits (find/replace/insert). Prefer addressing by id when available — title may not be unique. Do NOT call garden_write with file="tasks" — that path is for the legacy Obsidian backend and will not affect Bear.`
+    : `\n\nFor tasks, use \`garden_write\` with file="tasks".`;
+
+  const toolNote = `\n\n---\n\n# Tool Instructions\n\nTo update garden files use the MCP tool \`garden_write\` with file parameter: "plants", "journal", or "profile". Do NOT use Write or Edit tools — they are not available. Always Read the file first, then garden_write with full updated content.${tasksNote}`;
 
   systemPromptCache = profile
     ? `${skill}\n\n---\n\n# User Profile (preloaded)\n\n${profile}${toolNote}`
@@ -54,17 +58,8 @@ async function runAgent(prompt: string): Promise<string> {
     prompt,
     options: {
       systemPrompt,
-      mcpServers: {
-        "garden-mcp": {
-          command: "node",
-          args: [config.mcpGardenPath],
-          env: {
-            SKILL_DIR: config.skillDir,
-            TASKS_FILE_PATH: config.tasksFilePath,
-          },
-        },
-      },
-      allowedTools: ["Read", "Write", "Glob", "Grep", "mcp__garden-mcp__*"],
+      mcpServers: buildMcpServers(),
+      allowedTools: buildAllowedTools(["Read", "Write", "Glob", "Grep"]),
       cwd: config.skillDir,
       maxTurns: 10,
       permissionMode: "acceptEdits",
@@ -76,6 +71,35 @@ async function runAgent(prompt: string): Promise<string> {
   }
 
   return result;
+}
+
+function buildMcpServers() {
+  const servers: Record<string, any> = {
+    "garden-mcp": {
+      command: "node",
+      args: [config.mcpGardenPath],
+      env: {
+        SKILL_DIR: config.skillDir,
+        TASKS_FILE_PATH: config.tasksFilePath,
+      },
+    },
+  };
+  if (config.tasksBackend === "bear") {
+    servers.bear = {
+      command: config.bearcliPath,
+      args: ["mcp-server"],
+      env: {},
+    };
+  }
+  return servers;
+}
+
+function buildAllowedTools(base: string[]): string[] {
+  const tools = [...base, "mcp__garden-mcp__*"];
+  if (config.tasksBackend === "bear") {
+    tools.push("mcp__bear__*");
+  }
+  return tools;
 }
 
 function logAgentMessage(message: any): void {
@@ -120,17 +144,8 @@ async function queryAgent(fullPrompt: string, internalPrefix?: string): Promise<
     prompt: wrappedPrompt,
     options: {
       systemPrompt,
-      mcpServers: {
-        "garden-mcp": {
-          command: "node",
-          args: [config.mcpGardenPath],
-          env: {
-            SKILL_DIR: config.skillDir,
-            TASKS_FILE_PATH: config.tasksFilePath,
-          },
-        },
-      },
-      allowedTools: ["Read", "Glob", "Grep", "mcp__garden-mcp__*"],
+      mcpServers: buildMcpServers(),
+      allowedTools: buildAllowedTools(["Read", "Glob", "Grep"]),
       cwd: config.skillDir,
       maxTurns: 10,
       permissionMode: "acceptEdits",

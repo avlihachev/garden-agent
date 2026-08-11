@@ -30,6 +30,16 @@ function optionalFloat(name: string, fallback: number): number {
   return value;
 }
 
+type TasksBackend = "obsidian" | "bear";
+
+function tasksBackend(): TasksBackend {
+  const raw = (process.env.TASKS_BACKEND || "obsidian").toLowerCase();
+  if (raw !== "obsidian" && raw !== "bear") {
+    throw new Error(`TASKS_BACKEND must be "obsidian" or "bear" (got "${raw}")`);
+  }
+  return raw;
+}
+
 export const config = {
   botUrl: required("BOT_URL"),
   agentSecret: required("AGENT_SECRET"),
@@ -43,5 +53,9 @@ export const config = {
   historyTokenLimit: optionalInt("HISTORY_TOKEN_LIMIT", 20000),
   historyRetainTokens: optionalInt("HISTORY_RETAIN_TOKENS", 5000),
   sessionTimeoutMs: optionalInt("SESSION_TIMEOUT_MS", 3600000),
+  tasksBackend: tasksBackend(),
   tasksFilePath: process.env.TASKS_FILE_PATH || "",
+  bearcliPath: process.env.BEARCLI_PATH || "/Applications/Bear.app/Contents/MacOS/bearcli",
+  tasksBearTitle: process.env.TASKS_BEAR_TITLE || "Garden Tasks",
+  tasksBearId: process.env.TASKS_BEAR_ID || "",
 };
