@@ -6,6 +6,11 @@ import crypto from "crypto";
 import sharp from "sharp";
 import { config } from "./config.js";
 import { AgentMessage, DashboardData } from "./types.js";
+import { openDb } from "./state/db.js";
+import { GardenStore } from "./state/store.js";
+import { createGardenStateServer } from "./state/mcp.js";
+
+export const store = new GardenStore(openDb(config.dbPath));
 
 let systemPromptCache: string | null = null;
 
@@ -20,11 +25,7 @@ async function getSystemPrompt(): Promise<string> {
     readFile(profilePath, "utf-8").catch(() => ""),
   ]);
 
-  const tasksNote = config.tasksBackend === "bear"
-    ? `\n\nTasks live in the Bear note titled "${config.tasksBearTitle}"${config.tasksBearId ? ` (id: ${config.tasksBearId})` : ""} (tag #garden/tasks). Use Bear MCP tools for tasks: mcp__bear__read_note_content to read, mcp__bear__edit_note for targeted edits (find/replace/insert). Prefer addressing by id when available — title may not be unique. Do NOT call garden_write with file="tasks" — that path is for the legacy Obsidian backend and will not affect Bear.`
-    : `\n\nFor tasks, use \`garden_write\` with file="tasks".`;
-
-  const toolNote = `\n\n---\n\n# Tool Instructions\n\nTo update garden files use the MCP tool \`garden_write\` with file parameter: "plants", "journal", or "profile". Do NOT use Write or Edit tools — they are not available. Always Read the file first, then garden_write with full updated content.${tasksNote}`;
+  const toolNote = `\n\n---\n\n# Tool Instructions\n\nTo update garden prose files (plants.md care notes, journal, profile) use the MCP tool \`garden_write\` with file parameter: "plants", "journal", or "profile". Do NOT use Write or Edit tools — they are not available. Always Read the file first, then garden_write with full updated content.\n\nTasks and the plant registry live in a database, NOT in markdown. Whenever a task or a plant fact emerges from the conversation, call the garden-state tools (mcp__garden-state__*): tasks_list / task_add / task_update / task_note, plant_list / plant_add / plant_update / plant_log_event. Never write tasks into markdown files. The journal stays prose for narrative; per-plant facts go to plant_log_event.`;
 
   systemPromptCache = profile
     ? `${skill}\n\n---\n\n# User Profile (preloaded)\n\n${profile}${toolNote}`
@@ -74,32 +75,18 @@ async function runAgent(prompt: string): Promise<string> {
 }
 
 function buildMcpServers() {
-  const servers: Record<string, any> = {
+  return {
     "garden-mcp": {
       command: "node",
       args: [config.mcpGardenPath],
-      env: {
-        SKILL_DIR: config.skillDir,
-        TASKS_FILE_PATH: config.tasksFilePath,
-      },
+      env: { SKILL_DIR: config.skillDir },
     },
-  };
-  if (config.tasksBackend === "bear") {
-    servers.bear = {
-      command: config.bearcliPath,
-      args: ["mcp-server"],
-      env: {},
-    };
-  }
-  return servers;
+    "garden-state": createGardenStateServer(store),
+  } as Record<string, any>;
 }
 
 function buildAllowedTools(base: string[]): string[] {
-  const tools = [...base, "mcp__garden-mcp__*"];
-  if (config.tasksBackend === "bear") {
-    tools.push("mcp__bear__*");
-  }
-  return tools;
+  return [...base, "mcp__garden-mcp__*", "mcp__garden-state__*"];
 }
 
 function logAgentMessage(message: any): void {
