@@ -5,7 +5,7 @@ import { tmpdir } from "os";
 import crypto from "crypto";
 import sharp from "sharp";
 import { config } from "./config.js";
-import { AgentMessage, DashboardData } from "./types.js";
+import { AgentMessage } from "./types.js";
 import { openDb } from "./state/db.js";
 import { GardenStore } from "./state/store.js";
 import { createGardenStateServer } from "./state/mcp.js";
@@ -198,80 +198,6 @@ export async function processMessage(msg: AgentMessage, promptContext?: string):
 
   const prompt = promptContext || `<user_message>\n${msg.text}\n</user_message>`;
   return await queryAgent(prompt);
-}
-
-const TIMELINE_PROMPT = `You are given garden data files. Produce a JSON object with two arrays:
-
-1. "timeline" — for each seasonal plant (skip houseplants, trees, perennial herbs that don't have a sowing-to-harvest cycle this year), create an entry with growing stages. Each stage has a name ("indoor", "hardening", "outdoor", "harvest"), start date, and end date (ISO format YYYY-MM-DD).
-
-Rules for computing dates:
-- Use profile.md last_frost_date and the seasonal formulas below
-- Use journal.md entries for ACTUAL dates (if a plant was sown on a specific date, use that as the indoor start)
-- For future stages, compute from formulas
-- "indoor" = sowing indoors until hardening begins
-- "hardening" = 2 weeks before transplant
-- "outdoor" = transplant until harvest begins
-- "harvest" = estimated harvest period
-- Skip stages that don't apply (e.g. radish has no indoor stage)
-
-Seasonal formulas (relative to last_frost_date):
-- Peppers/chili indoor sow: last_frost - 10..12 weeks
-- Tomatoes (determinate) indoor sow: last_frost - 8..10 weeks
-- Alpine strawberry indoor sow: last_frost - 10..12 weeks
-- Tender crops transplant: last_frost + 1..2 weeks
-- Hardy crops transplant: last_frost - 2..4 weeks
-- Direct sow radish/lettuce: last_frost - 4..6 weeks
-- Hardening start: transplant_date - 14 days
-
-2. "calendar" — frost risk events and key planned dates:
-- Frost risk: any day in the next 7 days where min temp ≤ 0°C (from weather data if available)
-- Planned dates: upcoming transplant dates, sowing windows, harvest starts from the timeline
-
-Return ONLY valid JSON, no markdown fences, no explanation. Example format:
-{"timeline":[{"plant":"Tomato — Balkonzauber","stages":[{"name":"indoor","start":"2026-02-15","end":"2026-05-20"},{"name":"hardening","start":"2026-05-20","end":"2026-06-03"},{"name":"outdoor","start":"2026-06-03","end":"2026-08-01"},{"name":"harvest","start":"2026-08-01","end":"2026-09-15"}]}],"calendar":[{"date":"2026-04-15","type":"frost","title":"Frost risk -2°C"},{"date":"2026-06-03","type":"planned","title":"Transplant tomatoes outdoors"}]}`;
-
-export async function computeTimeline(): Promise<DashboardData | null> {
-  try {
-    const [plants, journal, profile] = await Promise.all([
-      readFile(join(config.skillDir, "plants.md"), "utf-8").catch(() => ""),
-      readFile(join(config.skillDir, "journal.md"), "utf-8").catch(() => ""),
-      readFile(join(config.skillDir, "profile.md"), "utf-8").catch(() => ""),
-    ]);
-
-    if (!plants && !journal) return null;
-
-    const today = new Date().toISOString().split("T")[0];
-    const prompt = `${TIMELINE_PROMPT}\n\nToday's date: ${today}\n\n<plants>\n${plants}\n</plants>\n\n<journal>\n${journal}\n</journal>\n\n<profile>\n${profile}\n</profile>`;
-
-    let result = "";
-    for await (const message of query({
-      prompt,
-      options: {
-        systemPrompt: "You are a garden data processor. Output only valid JSON.",
-        maxTurns: 1,
-        allowedTools: [],
-        permissionMode: "acceptEdits",
-      },
-    })) {
-      if ("result" in message) {
-        result = message.result;
-      }
-    }
-
-    const cleaned = result.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
-    const parsed = JSON.parse(cleaned) as DashboardData;
-
-    if (!Array.isArray(parsed.timeline) || !Array.isArray(parsed.calendar)) {
-      console.error("Invalid timeline response structure");
-      return null;
-    }
-
-    console.log(`📊 Timeline: ${parsed.timeline.length} plants, ${parsed.calendar.length} events`);
-    return parsed;
-  } catch (error) {
-    console.error("Timeline computation failed:", error instanceof Error ? error.message : error);
-    return null;
-  }
 }
 
 export { runAgent };

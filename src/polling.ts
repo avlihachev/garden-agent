@@ -1,8 +1,7 @@
 import { join } from "path";
 import { config } from "./config.js";
-import { processMessage, summarizeConversation, computeTimeline } from "./agent.js";
-import { fetchMessages, sendReply, syncGardenData, fetchTaskUpdates } from "./botApi.js";
-import { applyTaskUpdate, readTasks } from "./tasksBackend.js";
+import { processMessage, summarizeConversation, store } from "./agent.js";
+import { fetchMessages, sendReply } from "./botApi.js";
 import { HistoryService } from "./history.js";
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
@@ -40,31 +39,8 @@ async function maybeRotate(): Promise<void> {
   }
 }
 
-async function processTaskUpdates(): Promise<void> {
-  const updates = await fetchTaskUpdates();
-  if (updates.length === 0) return;
-
-  console.log(`📋 Received ${updates.length} task update(s)`);
-  let changed = false;
-
-  for (const update of updates) {
-    const applied = await applyTaskUpdate(update.taskLine, update.done);
-    if (applied) {
-      console.log(`✅ Task ${update.done ? "completed" : "reopened"}: ${update.taskLine.slice(0, 50)}`);
-      changed = true;
-    }
-  }
-
-  if (changed) {
-    syncGardenData()
-      .catch((err) => console.error("Sync after task update failed:", err instanceof Error ? err.message : err));
-  }
-}
-
 async function pollOnce(): Promise<void> {
   const messages = await fetchMessages();
-
-  await processTaskUpdates();
 
   if (messages.length === 0) return;
 
@@ -93,12 +69,12 @@ async function pollOnce(): Promise<void> {
       // check for rotation before processing
       await maybeRotate();
 
-      // check if new session — load tasks
+      // check if new session — inject open tasks from the store
       let currentTasks: string | null = null;
       if (history.isNewSession(config.sessionTimeoutMs)) {
-        currentTasks = await readTasks();
+        currentTasks = store.formatOpenTasks();
         history.data.lastSessionStart = Date.now();
-        console.log("📋 New session — tasks loaded");
+        console.log("📋 New session — tasks loaded from db");
       }
 
       // build prompt with history context
@@ -117,11 +93,6 @@ async function pollOnce(): Promise<void> {
         history.addMessage("user", userText);
         history.addMessage("assistant", reply);
         await history.save();
-
-        // sync garden data to bot dashboard (with timeline)
-        computeTimeline()
-          .then((dashboard) => syncGardenData(dashboard))
-          .catch((err) => console.error("Sync with timeline failed:", err instanceof Error ? err.message : err));
       }
     } catch (error) {
       console.error(`Error processing message ${msg.id}:`, error instanceof Error ? error.message : error);
@@ -132,11 +103,6 @@ async function pollOnce(): Promise<void> {
 
 export function startPolling(): void {
   console.log(`🔄 Polling every ${config.pollIntervalMs}ms`);
-
-  // initial sync on startup (with timeline)
-  computeTimeline()
-    .then((dashboard) => syncGardenData(dashboard))
-    .catch((err) => console.error("Initial sync with timeline failed:", err instanceof Error ? err.message : err));
 
   const poll = async () => {
     try {
