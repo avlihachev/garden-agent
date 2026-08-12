@@ -24,7 +24,7 @@ The bot works independently without the agent (graceful degradation). The agent 
 - Photo analysis (plant identification, health assessment)
 - Proactive morning checks with weather-based recommendations
 - Frost alerts via Open-Meteo API (no LLM tokens)
-- Task tracking integration (Obsidian, Linear, OmniFocus)
+- Task and plant tracking backed by SQLite, exposed via MCP tools and a local dashboard
 - Restricted file writes via `garden_write` MCP tool (least privilege)
 
 ## Prerequisites
@@ -62,10 +62,21 @@ Optional:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `POLL_INTERVAL_MS` | 5000 | Polling interval in ms |
+| `REQUEST_TIMEOUT_MS` | 30000 | HTTP request timeout in ms |
 | `LATITUDE` / `LONGITUDE` | 63.84 / 23.13 | Location for weather/frost checks |
 | `HISTORY_TOKEN_LIMIT` | 20000 | Max tokens before history rotation |
+| `HISTORY_RETAIN_TOKENS` | 5000 | Tokens kept after a history rotation |
 | `SESSION_TIMEOUT_MS` | 3600000 | New session threshold (1 hour) |
-| `TASKS_FILE_PATH` | — | Path to Obsidian tasks file |
+| `GARDEN_DB_PATH` | `$SKILL_DIR/garden.db` | SQLite database for tasks/plants state |
+| `DASHBOARD_PORT` | 7788 | Local dashboard port (loopback only) |
+
+## Dashboard
+
+A local dashboard at `http://localhost:7788` shows open/closed tasks and plants
+from the same SQLite database the MCP tools read and write. Close a task or
+leave a note on it from the browser; the agent picks up the change on its next
+read. Loopback-only by design — it checks the request's Host header and
+rejects anything else.
 
 ## Running
 
