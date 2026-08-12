@@ -11,6 +11,9 @@ function sendJson(res: ServerResponse, status: number, data: unknown): void {
   res.end(JSON.stringify(data));
 }
 
+// only accept requests addressed to this loopback server, to block DNS rebinding
+const ALLOWED_HOST = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i;
+
 async function readJsonBody(req: IncomingMessage): Promise<any> {
   const chunks: Buffer[] = [];
   for await (const c of req) chunks.push(c as Buffer);
@@ -22,6 +25,15 @@ export function startDashboard(store: GardenStore, port: number): Promise<Server
     const url = new URL(req.url || "/", "http://localhost");
     const path = url.pathname;
     try {
+      if (!ALLOWED_HOST.test(req.headers.host || "")) {
+        sendJson(res, 403, { error: "forbidden host" });
+        return;
+      }
+      if ((req.method === "PATCH" || req.method === "POST") &&
+        !(req.headers["content-type"] || "").startsWith("application/json")) {
+        sendJson(res, 415, { error: "json only" });
+        return;
+      }
       if (req.method === "GET" && path === "/") {
         const html = await readFile(HTML_PATH, "utf-8").catch(() => "<h1>dashboard.html missing</h1>");
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -29,7 +41,22 @@ export function startDashboard(store: GardenStore, port: number): Promise<Server
         return;
       }
       if (req.method === "GET" && path === "/api/state") {
-        const tasks = store.listTasks().map(t => ({ ...t, notes: store.listTaskNotes(t.id) }));
+        const all = store.listTasks();
+        const open = all.filter(t => t.status === "open");
+        // closed tasks grow without bound, so cap them at the 50 most recent
+        // (nulls last, then id desc) instead of shipping the whole history
+        const closed = all
+          .filter(t => t.status !== "open")
+          .sort((a, b) => {
+            if (a.completedAt !== b.completedAt) {
+              if (a.completedAt === null) return 1;
+              if (b.completedAt === null) return -1;
+              return a.completedAt < b.completedAt ? 1 : -1;
+            }
+            return b.id - a.id;
+          })
+          .slice(0, 50);
+        const tasks = [...open, ...closed].map(t => ({ ...t, notes: store.listTaskNotes(t.id) }));
         const plants = store.listPlants().map(p => ({ ...p, events: store.listPlantEvents(p.id) }));
         sendJson(res, 200, { tasks, plants });
         return;

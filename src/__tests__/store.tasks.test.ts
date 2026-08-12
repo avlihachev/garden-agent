@@ -86,4 +86,17 @@ describe("tasks", () => {
     expect(reopened.status).toBe("open");
     expect(reopened.completedAt).toBeNull();
   });
+
+  it("rejects a free-text recurrence like 'weekly'", () => {
+    expect(() => store.addTask({ title: "x", recurrence: "weekly" })).toThrow(/invalid recurrence/);
+  });
+
+  it("rejects days:0", () => {
+    expect(() => store.addTask({ title: "x", recurrence: "days:0" })).toThrow(/invalid recurrence/);
+  });
+
+  it("accepts 'yearly' and 'days:14'", () => {
+    expect(store.addTask({ title: "x", recurrence: "yearly" }).recurrence).toBe("yearly");
+    expect(store.addTask({ title: "y", recurrence: "days:14" }).recurrence).toBe("days:14");
+  });
 });

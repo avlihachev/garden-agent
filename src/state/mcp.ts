@@ -30,7 +30,7 @@ export function buildTools(store: GardenStore) {
         plant_id: z.number().optional(),
         due_start: z.string().optional(),
         due_end: z.string().optional(),
-        recurrence: z.string().optional(),
+        recurrence: z.string().regex(/^(yearly|days:[1-9]\d{0,3})$/).optional(),
       },
       handler: async (a: any) => json(store.addTask({
         title: a.title, details: a.details, plantId: a.plant_id,

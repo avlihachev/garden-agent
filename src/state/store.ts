@@ -28,6 +28,8 @@ function addYears(date: string, years: number): string {
   return isoDate(d);
 }
 
+const RECURRENCE_RE = /^(yearly|days:[1-9]\d{0,3})$/;
+
 function rowToTask(r: any): Task {
   return {
     id: r.id, title: r.title, details: r.details, plantId: r.plant_id,
@@ -50,6 +52,10 @@ export class GardenStore {
 
   addTask(input: { title: string; details?: string; plantId?: number; dueStart?: string;
     dueEnd?: string; recurrence?: string; source?: "agent" | "user" }): Task {
+    // zod validates this at the SDK layer, but tests call handlers directly, bypassing zod
+    if (input.recurrence != null && !RECURRENCE_RE.test(input.recurrence)) {
+      throw new Error("invalid recurrence: " + input.recurrence);
+    }
     const dueStart = input.dueStart ?? null;
     const dueEnd = input.dueEnd ?? dueStart;
     const res = this.db.prepare(
