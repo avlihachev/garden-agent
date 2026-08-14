@@ -160,6 +160,30 @@ describe("dashboard api", () => {
     expect(body.author).toBe("me");
   });
 
+  it("PATCH refuses to rewrite a note the agent wrote", async () => {
+    const t = store.addTask({ title: "Prune" });
+    const mine = store.addTaskNote(t.id, "agent", "окно закрывается 22.08");
+    const res = await patch(`/api/tasks/${t.id}/notes/${mine.id}`, { text: "переписал за агента" });
+    expect(res.status).toBe(403);
+    expect(store.listTaskNotes(t.id)[0].text).toBe("окно закрывается 22.08");
+  });
+
+  it("PATCH /api/plants/:id/events/:eventId edits the owner's own event only", async () => {
+    const p = store.addPlant({ name: "Mint", kind: "herb", location: "bed", status: "planted" });
+    const byAgent = store.logPlantEvent(p.id, "treated", "срезаны сухие стебли");
+    const mine = store.logPlantEvent(p.id, "note", "не расползается", "me");
+
+    const ok = await patch(`/api/plants/${p.id}/events/${mine.id}`, { note: "совсем не расползается" });
+    expect(ok.status).toBe(200);
+    expect(((await ok.json()) as any).note).toBe("совсем не расползается");
+
+    const denied = await patch(`/api/plants/${p.id}/events/${byAgent.id}`, { note: "подмена" });
+    expect(denied.status).toBe(403);
+    expect(store.listPlantEvents(p.id)[0].note).toBe("срезаны сухие стебли");
+
+    expect((await patch(`/api/plants/${p.id}/events/9999`, { note: "нет такого" })).status).toBe(404);
+  });
+
   it("PATCH on a note of another task 404s instead of editing it", async () => {
     const a = store.addTask({ title: "A" });
     const b = store.addTask({ title: "B" });

@@ -151,12 +151,35 @@ export class GardenStore {
     return { id: row.id, taskId: row.task_id, ts: row.ts, author: row.author, text: row.text };
   }
 
-  // ts stays put: it records when the note was written, not when it was last fixed
-  updateTaskNote(id: number, text: string): TaskNote {
-    const res = this.db.prepare("UPDATE task_notes SET text = ? WHERE id = ?").run(text, id);
-    if (res.changes === 0) throw new Error(`task note ${id} not found`);
+  // ts stays put: it records when the note was written, not when it was last fixed.
+  // `by` is a hard rule, not a hint — neither side may rewrite the other's words,
+  // or the thread stops being a dialogue either of them can trust.
+  updateTaskNote(id: number, text: string, by: "me" | "agent"): TaskNote {
+    const res = this.db.prepare("UPDATE task_notes SET text = ? WHERE id = ? AND author = ?")
+      .run(text, id, by);
+    if (res.changes === 0) throw new Error(this.deniedEdit("task note", id, by, "task_notes"));
     const row = this.db.prepare("SELECT * FROM task_notes WHERE id = ?").get(id) as any;
     return { id: row.id, taskId: row.task_id, ts: row.ts, author: row.author, text: row.text };
+  }
+
+  // only the note text: changing an event's type would rewrite what happened, and
+  // 'sown'/'transplanted' carry date side effects. Log a new event instead.
+  updatePlantEvent(id: number, note: string, by: "me" | "agent"): PlantEvent {
+    const res = this.db.prepare("UPDATE plant_events SET note = ? WHERE id = ? AND author = ?")
+      .run(note, id, by);
+    if (res.changes === 0) throw new Error(this.deniedEdit("plant event", id, by, "plant_events"));
+    const row = this.db.prepare("SELECT * FROM plant_events WHERE id = ?").get(id) as any;
+    return {
+      id: row.id, plantId: row.plant_id, ts: row.ts,
+      type: row.type, note: row.note, author: row.author,
+    };
+  }
+
+  private deniedEdit(what: string, id: number, by: string, table: string): string {
+    const row = this.db.prepare(`SELECT author FROM ${table} WHERE id = ?`).get(id) as any;
+    return row
+      ? `${what} ${id} was written by ${row.author} and cannot be edited by ${by}`
+      : `${what} ${id} not found`;
   }
 
   listTaskNotes(taskId: number): TaskNote[] {

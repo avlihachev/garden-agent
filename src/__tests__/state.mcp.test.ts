@@ -41,6 +41,32 @@ describe("garden-state tools", () => {
     expect(plants[0].sownAt).toBeTruthy();
   });
 
+  it("the agent may fix its own note but not the owner's", async () => {
+    await call("task_add", { title: "Обрезка вишни" });
+    await call("task_note", { id: 1, text: "окно 12-13.08" });
+    const owners = store.addTaskNote(1, "me", "срезал только сухое");
+
+    const fixed = await call("task_note_update", { id: 1, text: "окно 12-13.08, резерв 20-22.08" });
+    expect(fixed.text).toBe("окно 12-13.08, резерв 20-22.08");
+
+    await expect(call("task_note_update", { id: owners.id, text: "переписал владельца" }))
+      .rejects.toThrow(/written by me/);
+    expect(store.listTaskNotes(1)[1].text).toBe("срезал только сухое");
+  });
+
+  it("the agent may fix its own plant event but not the owner's", async () => {
+    const p = await call("plant_add", { name: "Мята", kind: "herb", location: "грядка", status: "planted" });
+    const mine = await call("plant_log_event", { id: p.id, type: "treated", note: "убраны сухие стебли" });
+    const owners = store.logPlantEvent(p.id, "note", "не расползается", "me");
+
+    const fixed = await call("plant_event_update", { id: mine.id, note: "убраны сухие стебли, весна 2026" });
+    expect(fixed.note).toBe("убраны сухие стебли, весна 2026");
+
+    await expect(call("plant_event_update", { id: owners.id, note: "подмена" }))
+      .rejects.toThrow(/written by me/);
+    expect(store.listPlantEvents(p.id)[1].note).toBe("не расползается");
+  });
+
   // the owner answers in the thread from the dashboard; without this the reply is invisible
   it("tasks_list carries the note thread back to the agent", async () => {
     await call("task_add", { title: "Prune the cherry" });

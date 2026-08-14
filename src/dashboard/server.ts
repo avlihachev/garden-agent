@@ -161,11 +161,34 @@ export function startDashboard(store: GardenStore, port: number,
         if (!isText(body.text)) { sendJson(res, 400, { error: "text required" }); return; }
         const [taskId, noteId] = [Number(noteEditMatch[1]), Number(noteEditMatch[2])];
         // a note id alone would let one task's thread edit another's
-        if (!store.listTaskNotes(taskId).some(n => n.id === noteId)) {
+        const note = store.listTaskNotes(taskId).find(n => n.id === noteId);
+        if (!note) {
           sendJson(res, 404, { error: "note not found on this task" });
           return;
         }
-        sendJson(res, 200, store.updateTaskNote(noteId, body.text.trim()));
+        if (note.author !== "me") {
+          sendJson(res, 403, { error: "the agent wrote this note" });
+          return;
+        }
+        sendJson(res, 200, store.updateTaskNote(noteId, body.text.trim(), "me"));
+        return;
+      }
+      const eventEditMatch = path.match(/^\/api\/plants\/(\d+)\/events\/(\d+)$/);
+      if (req.method === "PATCH" && eventEditMatch) {
+        const body = await readJsonBody(req);
+        if (!isObject(body)) { sendJson(res, 400, { error: "object expected" }); return; }
+        if (!isText(body.note)) { sendJson(res, 400, { error: "text required" }); return; }
+        const [plantId, eventId] = [Number(eventEditMatch[1]), Number(eventEditMatch[2])];
+        const event = store.listPlantEvents(plantId).find(e => e.id === eventId);
+        if (!event) {
+          sendJson(res, 404, { error: "event not found on this plant" });
+          return;
+        }
+        if (event.author !== "me") {
+          sendJson(res, 403, { error: "the agent logged this event" });
+          return;
+        }
+        sendJson(res, 200, store.updatePlantEvent(eventId, body.note.trim(), "me"));
         return;
       }
       sendJson(res, 404, { error: "not found" });

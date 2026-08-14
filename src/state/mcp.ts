@@ -60,6 +60,12 @@ export function buildTools(store: GardenStore) {
       handler: async (a: any) => json(store.addTaskNote(a.id, "agent", a.text)),
     },
     {
+      name: "task_note_update",
+      description: "Fix the text of a note YOU wrote (author 'agent'). Notes by 'me' are the owner's own words and this will refuse to touch them — reply with a new note instead. Use this to correct yourself, not to overwrite the thread.",
+      schema: { id: z.number(), text: z.string().min(1) },
+      handler: async (a: any) => json(store.updateTaskNote(a.id, a.text, "agent")),
+    },
+    {
       name: "plant_list",
       description: "List plants, optionally by status or location. Each plant comes back with its event history, including notes the owner logged from the dashboard.",
       schema: {
@@ -107,6 +113,12 @@ export function buildTools(store: GardenStore) {
         note: z.string().optional(),
       },
       handler: async (a: any) => json(store.logPlantEvent(a.id, a.type, a.note)),
+    },
+    {
+      name: "plant_event_update",
+      description: "Fix the note text of a plant event YOU logged. Only the text — to change the event type, log a new event. Events by 'me' are the owner's observations and this will refuse to touch them.",
+      schema: { id: z.number(), note: z.string().min(1) },
+      handler: async (a: any) => json(store.updatePlantEvent(a.id, a.note, "agent")),
     },
   ];
 }

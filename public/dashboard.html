@@ -357,6 +357,11 @@
     color: var(--water); margin-right: 7px;
   }
   .event-who.mine { color: var(--moss); }
+  .event[hidden] { display: none; }
+  .eventbtn {
+    font: 10px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.1em;
+    margin-left: 8px;
+  }
 
   .empty { font-size: 15px; color: var(--ink-soft); padding: 14px 0; }
 
@@ -1256,6 +1261,79 @@ function focusTask(task) {
   setTimeout(() => row.classList.remove("is-flash"), 1600);
 }
 
+function eventBlock(plant, ev) {
+  const box = document.createElement("div");
+
+  const line = document.createElement("p");
+  line.className = "event";
+  const d = document.createElement("span");
+  d.className = "event-date";
+  d.textContent = ev.ts ? fmtDay.format(new Date(ev.ts)) : "";
+  const who = document.createElement("span");
+  who.className = "event-who" + (ev.author === "me" ? " mine" : "");
+  who.textContent = ev.author === "me" ? "я" : "агент";
+  const kind = document.createElement("span");
+  kind.className = "event-kind";
+  kind.textContent = EVENT_LABEL[ev.type] || ev.type;
+  line.append(d, who, kind);
+  const text = document.createElement("span");
+  text.textContent = ev.note || "";
+  line.appendChild(text);
+
+  // the owner edits their own records; the agent's stay as logged
+  if (ev.author !== "me" || !ev.note) { box.appendChild(line); return box; }
+
+  const edit = document.createElement("button");
+  edit.type = "button";
+  edit.className = "notebtn eventbtn";
+  edit.textContent = "править";
+  edit.setAttribute("aria-expanded", "false");
+  line.appendChild(edit);
+
+  const form = document.createElement("form");
+  form.className = "formstack";
+  form.hidden = true;
+  const area = control("textarea", { value: ev.note });
+  area.classList.add("notesarea");
+  area.setAttribute("aria-label", `Текст события для «${plant.name}»`);
+  const save = document.createElement("button");
+  save.type = "submit";
+  save.className = "plainbtn";
+  save.textContent = "сохранить";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "plainbtn";
+  cancel.textContent = "отмена";
+  const row = document.createElement("div");
+  row.className = "editrow";
+  row.append(save, cancel);
+  form.append(area, row);
+
+  const close = () => {
+    form.hidden = true;
+    line.hidden = false;
+    edit.setAttribute("aria-expanded", "false");
+  };
+  edit.addEventListener("click", () => {
+    const opening = form.hidden;
+    form.hidden = !opening;
+    line.hidden = opening;
+    edit.setAttribute("aria-expanded", String(opening));
+    if (opening) { area.value = ev.note; area.focus(); }
+  });
+  cancel.addEventListener("click", close);
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const next = area.value.trim();
+    if (!next) { toast("Текст события не может быть пустым."); return; }
+    if (next === ev.note) { close(); return; }
+    send(`/api/plants/${plant.id}/events/${ev.id}`, "PATCH", { note: next }, "Событие изменено.");
+  });
+
+  box.append(line, form);
+  return box;
+}
+
 function plantEditor(plant) {
   const box = document.createElement("div");
   box.className = "formstack";
@@ -1361,22 +1439,7 @@ function plantCard(plant) {
   if (linked) events.appendChild(linked);
 
   if (plant.events.length) {
-    for (const ev of plant.events) {
-      const line = document.createElement("p");
-      line.className = "event";
-      const d = document.createElement("span");
-      d.className = "event-date";
-      d.textContent = ev.ts ? fmtDay.format(new Date(ev.ts)) : "";
-      const who = document.createElement("span");
-      who.className = "event-who" + (ev.author === "me" ? " mine" : "");
-      who.textContent = ev.author === "me" ? "я" : "агент";
-      const k = document.createElement("span");
-      k.className = "event-kind";
-      k.textContent = EVENT_LABEL[ev.type] || ev.type;
-      line.append(d, who, k);
-      if (ev.note) line.append(document.createTextNode(ev.note));
-      events.appendChild(line);
-    }
+    for (const ev of plant.events) events.appendChild(eventBlock(plant, ev));
   } else if (!plant.notes && !linked) {
     const p = document.createElement("p");
     p.className = "event";
