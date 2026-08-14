@@ -11,7 +11,7 @@ export function buildTools(store: GardenStore) {
   return [
     {
       name: "tasks_list",
-      description: "List garden tasks. window: today|week|overdue|all",
+      description: "List garden tasks. window: today|week|overdue|all. Each task comes back with its note thread — notes by 'me' are the owner writing back to you, so read them before advising on that task.",
       schema: {
         status: z.enum(["open", "done", "dropped"]).optional(),
         window: z.enum(["today", "week", "overdue", "all"]).optional(),
@@ -19,7 +19,7 @@ export function buildTools(store: GardenStore) {
       },
       handler: async (a: any) => json(store.listTasks({
         status: a.status, window: a.window === "all" ? undefined : a.window, plantId: a.plant_id,
-      })),
+      }).map(t => ({ ...t, notes: store.listTaskNotes(t.id) }))),
     },
     {
       name: "task_add",
@@ -61,12 +61,13 @@ export function buildTools(store: GardenStore) {
     },
     {
       name: "plant_list",
-      description: "List plants, optionally by status or location.",
+      description: "List plants, optionally by status or location. Each plant comes back with its event history, including notes the owner logged from the dashboard.",
       schema: {
         status: z.enum(["seed", "seedling", "planted", "dormant", "done"]).optional(),
         location: z.string().optional(),
       },
-      handler: async (a: any) => json(store.listPlants({ status: a.status, location: a.location })),
+      handler: async (a: any) => json(store.listPlants({ status: a.status, location: a.location })
+        .map(p => ({ ...p, events: store.listPlantEvents(p.id) }))),
     },
     {
       name: "plant_add",

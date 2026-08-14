@@ -107,6 +107,107 @@ describe("dashboard api", () => {
     expect((await res.json()) as any).toEqual({ error: "json only" });
   });
 
+  const patch = (path: string, body: unknown) => fetch(`${base}${path}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const post = (path: string, body: unknown) => fetch(`${base}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  it("PATCH /api/tasks/:id edits the title and the window", async () => {
+    const t = store.addTask({ title: "Prune", dueStart: "2026-08-01", dueEnd: "2026-08-10" });
+    const res = await patch(`/api/tasks/${t.id}`, {
+      title: "Prune the old cherry", dueStart: "2026-08-05", dueEnd: "2026-08-20",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.title).toBe("Prune the old cherry");
+    expect([body.dueStart, body.dueEnd]).toEqual(["2026-08-05", "2026-08-20"]);
+  });
+
+  it("PATCH /api/tasks/:id keeps due_end >= due_start", async () => {
+    const t = store.addTask({ title: "Sow", dueStart: "2026-08-01", dueEnd: "2026-08-10" });
+    const backwards = await patch(`/api/tasks/${t.id}`, { dueEnd: "2026-07-01" });
+    expect(backwards.status).toBe(400);
+
+    // a lone null end collapses the window to a single day instead of breaking it
+    const cleared = await patch(`/api/tasks/${t.id}`, { dueEnd: null });
+    expect(cleared.status).toBe(200);
+    const body = (await cleared.json()) as any;
+    expect([body.dueStart, body.dueEnd]).toEqual(["2026-08-01", "2026-08-01"]);
+  });
+
+  it("PATCH /api/tasks/:id rejects junk and empty patches", async () => {
+    const t = store.addTask({ title: "Water" });
+    expect((await patch(`/api/tasks/${t.id}`, { status: "cancelled" })).status).toBe(400);
+    expect((await patch(`/api/tasks/${t.id}`, { title: "   " })).status).toBe(400);
+    expect((await patch(`/api/tasks/${t.id}`, { dueStart: "05.08.2026" })).status).toBe(400);
+    expect((await patch(`/api/tasks/${t.id}`, {})).status).toBe(400);
+  });
+
+  it("PATCH /api/tasks/:id/notes/:noteId edits a note and keeps its timestamp", async () => {
+    const t = store.addTask({ title: "Prune" });
+    const note = store.addTaskNote(t.id, "me", "срезал сухое");
+    const res = await patch(`/api/tasks/${t.id}/notes/${note.id}`, { text: "срезал сухое и нижний ярус" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.text).toBe("срезал сухое и нижний ярус");
+    expect(body.ts).toBe(note.ts);
+    expect(body.author).toBe("me");
+  });
+
+  it("PATCH on a note of another task 404s instead of editing it", async () => {
+    const a = store.addTask({ title: "A" });
+    const b = store.addTask({ title: "B" });
+    const note = store.addTaskNote(a.id, "me", "принадлежит A");
+    const res = await patch(`/api/tasks/${b.id}/notes/${note.id}`, { text: "угнал" });
+    expect(res.status).toBe(404);
+    expect(store.listTaskNotes(a.id)[0].text).toBe("принадлежит A");
+  });
+
+  it("PATCH /api/tasks/:id/notes/:noteId rejects empty text", async () => {
+    const t = store.addTask({ title: "Water" });
+    const note = store.addTaskNote(t.id, "me", "утром");
+    expect((await patch(`/api/tasks/${t.id}/notes/${note.id}`, { text: "   " })).status).toBe(400);
+  });
+
+  it("PATCH /api/plants/:id edits status, location and notes", async () => {
+    const p = store.addPlant({ name: "Dill", kind: "herb", location: "sill", status: "seed" });
+    const res = await patch(`/api/plants/${p.id}`, {
+      status: "planted", location: "greenhouse", notes: "deep pot, taproot",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect([body.status, body.location, body.notes]).toEqual(["planted", "greenhouse", "deep pot, taproot"]);
+
+    const cleared = await patch(`/api/plants/${p.id}`, { notes: "" });
+    expect(((await cleared.json()) as any).notes).toBeNull();
+  });
+
+  it("PATCH /api/plants/:id rejects a bad status and 404s an unknown plant", async () => {
+    const p = store.addPlant({ name: "Mint", kind: "herb", location: "bed", status: "planted" });
+    expect((await patch(`/api/plants/${p.id}`, { status: "thriving" })).status).toBe(400);
+    expect((await patch(`/api/plants/999`, { status: "done" })).status).toBe(404);
+  });
+
+  it("POST /api/plants/:id/events logs an event and backfills dates", async () => {
+    const p = store.addPlant({ name: "Peas", kind: "vegetable", location: "balcony", status: "seed" });
+    const res = await post(`/api/plants/${p.id}/events`, { type: "sown", note: "soaked overnight" });
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as any).type).toBe("sown");
+    expect(store.getPlant(p.id).sownAt).not.toBeNull();
+  });
+
+  it("POST /api/plants/:id/events rejects a bad type and a noteless note", async () => {
+    const p = store.addPlant({ name: "Kale", kind: "vegetable", location: "bed", status: "planted" });
+    expect((await post(`/api/plants/${p.id}/events`, { type: "watered" })).status).toBe(400);
+    expect((await post(`/api/plants/${p.id}/events`, { type: "note", note: "  " })).status).toBe(400);
+  });
+
   it("404 on unknown task, 400 on bad json", async () => {
     const bad = await fetch(`${base}/api/tasks/999`, {
       method: "PATCH", headers: { "content-type": "application/json" },

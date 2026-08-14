@@ -148,6 +148,14 @@ export class GardenStore {
     return { id: row.id, taskId: row.task_id, ts: row.ts, author: row.author, text: row.text };
   }
 
+  // ts stays put: it records when the note was written, not when it was last fixed
+  updateTaskNote(id: number, text: string): TaskNote {
+    const res = this.db.prepare("UPDATE task_notes SET text = ? WHERE id = ?").run(text, id);
+    if (res.changes === 0) throw new Error(`task note ${id} not found`);
+    const row = this.db.prepare("SELECT * FROM task_notes WHERE id = ?").get(id) as any;
+    return { id: row.id, taskId: row.task_id, ts: row.ts, author: row.author, text: row.text };
+  }
+
   listTaskNotes(taskId: number): TaskNote[] {
     return (this.db.prepare("SELECT * FROM task_notes WHERE task_id = ? ORDER BY ts, id").all(taskId) as any[])
       .map(r => ({ id: r.id, taskId: r.task_id, ts: r.ts, author: r.author, text: r.text }));

@@ -40,4 +40,22 @@ describe("garden-state tools", () => {
     const plants = await call("plant_list", {});
     expect(plants[0].sownAt).toBeTruthy();
   });
+
+  // the owner answers in the thread from the dashboard; without this the reply is invisible
+  it("tasks_list carries the note thread back to the agent", async () => {
+    await call("task_add", { title: "Prune the cherry" });
+    store.addTaskNote(1, "me", "срезал только сухое, на перевод не трогал");
+    await call("task_note", { id: 1, text: "окно закрывается 22.08" });
+    const listed = await call("tasks_list", { status: "open" });
+    expect(listed[0].notes.map((n: any) => n.author)).toEqual(["me", "agent"]);
+    expect(listed[0].notes[0].text).toContain("срезал только сухое");
+  });
+
+  it("plant_list carries the event history back to the agent", async () => {
+    const p = await call("plant_add", { name: "Ива", kind: "tree", location: "участок", status: "planted" });
+    store.logPlantEvent(p.id, "note", "трутовик на соседнем стволе");
+    const plants = await call("plant_list", {});
+    expect(plants[0].events).toHaveLength(1);
+    expect(plants[0].events[0].note).toContain("трутовик");
+  });
 });
