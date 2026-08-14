@@ -86,7 +86,12 @@
     min-width: 640px;
     padding-top: 36px;
   }
-  .band-cols { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 172px; }
+  /* the -1px absorbs flex rounding, which otherwise overshoots by a hairline
+     and summons a scrollbar under a band that has nothing to scroll */
+  .band-cols {
+    position: relative; display: flex; align-items: flex-end; gap: 2px;
+    height: 172px; width: calc(100% - 1px);
+  }
   .growing {
     position: absolute; top: 36px; bottom: 28px;
     background: color-mix(in srgb, var(--moss) 5%, transparent);
@@ -260,9 +265,11 @@
   .note-who.agent { color: var(--water); }
   .note-text { font-size: 14px; line-height: 1.5; margin: 1px 0 0; }
   .note-text[hidden] { display: none; }
+  /* padding, not a bigger font: keeps the micro-label quiet but clickable */
   .notebtn {
     font: inherit; text-transform: inherit; letter-spacing: inherit;
-    color: var(--ink-faint); background: none; border: 0; padding: 0; cursor: pointer;
+    color: var(--ink-faint); background: none; border: 0; cursor: pointer;
+    padding: 4px 3px; margin: -4px 0;
     border-bottom: 1px solid currentColor;
   }
   .notebtn:hover { color: var(--sun); }
@@ -345,6 +352,11 @@
   .event { font-size: 13px; line-height: 1.5; margin-bottom: 5px; }
   .event-date { font: 10px/1 var(--mono); color: var(--ink-faint); letter-spacing: 0.06em; margin-right: 7px; }
   .event-kind { font: 10px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--moss); margin-right: 7px; }
+  .event-who {
+    font: 10px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--water); margin-right: 7px;
+  }
+  .event-who.mine { color: var(--moss); }
 
   .empty { font-size: 15px; color: var(--ink-soft); padding: 14px 0; }
 
@@ -417,9 +429,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
-// frost dates mirror profile.md — the whole calendar hangs off them
-const LAST_FROST = "06-15";
-const FIRST_FROST = "09-15";
+// frost dates come from profile.md through /api/state; these are the fallback
+let LAST_FROST = "06-15";
+let FIRST_FROST = "09-15";
 const HORIZON_DAYS = 180;
 
 const el = (id) => document.getElementById(id);
@@ -632,6 +644,8 @@ function renderBand() {
     const m = week.date.getMonth();
     if (m === lastMonth) continue;
     lastMonth = m;
+    // a label this close to the edge would stick out and add a scrollbar
+    if (pct(week.date) > 93) continue;
     const tag = document.createElement("span");
     tag.className = "month";
     tag.style.left = `${pct(week.date)}%`;
@@ -955,15 +969,23 @@ function taskEditor(task) {
   save.className = "plainbtn";
   save.textContent = "сохранить";
 
+  const details = control("textarea", { value: task.details || "" });
+  details.classList.add("notesarea");
+  details.setAttribute("aria-label", "Описание задачи");
+
   const titleRow = document.createElement("div");
   titleRow.className = "editrow";
   titleRow.appendChild(title);
+
+  const detailsLabel = document.createElement("span");
+  detailsLabel.className = "flabel";
+  detailsLabel.textContent = "описание";
 
   const dateRow = document.createElement("div");
   dateRow.className = "editrow";
   dateRow.append(field("окно с", from), field("по", to), save);
 
-  form.append(titleRow, dateRow);
+  form.append(titleRow, detailsLabel, details, dateRow);
 
   toggle.addEventListener("click", () => {
     form.hidden = !form.hidden;
@@ -977,6 +999,7 @@ function taskEditor(task) {
     const nextTitle = title.value.trim();
     if (!nextTitle) { toast("Заголовок не может быть пустым."); return; }
     if (nextTitle !== task.title) patch.title = nextTitle;
+    if (details.value.trim() !== (task.details || "").trim()) patch.details = details.value;
     const nextFrom = from.value || null;
     const nextTo = to.value || null;
     if (nextFrom !== (task.dueStart || null)) patch.dueStart = nextFrom;
@@ -1344,10 +1367,13 @@ function plantCard(plant) {
       const d = document.createElement("span");
       d.className = "event-date";
       d.textContent = ev.ts ? fmtDay.format(new Date(ev.ts)) : "";
+      const who = document.createElement("span");
+      who.className = "event-who" + (ev.author === "me" ? " mine" : "");
+      who.textContent = ev.author === "me" ? "я" : "агент";
       const k = document.createElement("span");
       k.className = "event-kind";
       k.textContent = EVENT_LABEL[ev.type] || ev.type;
-      line.append(d, k);
+      line.append(d, who, k);
       if (ev.note) line.append(document.createTextNode(ev.note));
       events.appendChild(line);
     }
@@ -1423,6 +1449,10 @@ async function load() {
   const data = await res.json();
   state.tasks = data.tasks;
   state.plants = data.plants;
+  if (data.season) {
+    LAST_FROST = data.season.lastFrost;
+    FIRST_FROST = data.season.firstFrost;
+  }
   render();
 }
 

@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS plant_events (
   plant_id INTEGER NOT NULL REFERENCES plants(id),
   ts TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('sown','transplanted','harvested','treated','note')),
-  note TEXT
+  note TEXT,
+  author TEXT NOT NULL DEFAULT 'agent' CHECK (author IN ('me','agent'))
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,9 +43,19 @@ CREATE TABLE IF NOT EXISTS task_notes (
 );
 `;
 
+// CREATE TABLE IF NOT EXISTS never touches a table that already exists, so a
+// column added after a db was created needs an explicit ALTER. SQLite cannot
+// attach the CHECK constraint this way — the store and the API validate instead.
+function addColumnIfMissing(db: DatabaseSync, table: string, column: string, ddl: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!columns.some(c => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+}
+
 export function openDb(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA);
+  // events written before this column existed came from the agent
+  addColumnIfMissing(db, "plant_events", "author", "author TEXT NOT NULL DEFAULT 'agent'");
   return db;
 }

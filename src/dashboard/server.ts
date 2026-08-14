@@ -2,6 +2,7 @@ import { createServer, IncomingMessage, ServerResponse, Server } from "http";
 import { readFile } from "fs/promises";
 import { fileURLToPath } from "url";
 import type { GardenStore } from "../state/store.js";
+import { DEFAULT_SEASON, type Season } from "../season.js";
 
 // ../../public works from both src/ (tsx) and dist/ (tsc output)
 const HTML_PATH = fileURLToPath(new URL("../../public/dashboard.html", import.meta.url));
@@ -30,7 +31,8 @@ const isText = (v: unknown): v is string => typeof v === "string" && v.trim().le
 const isDateOrNull = (v: unknown): boolean => v === null || (typeof v === "string" && DATE.test(v));
 const isObject = (v: unknown): boolean => !!v && typeof v === "object" && !Array.isArray(v);
 
-export function startDashboard(store: GardenStore, port: number): Promise<Server> {
+export function startDashboard(store: GardenStore, port: number,
+  season: Season = DEFAULT_SEASON): Promise<Server> {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url || "/", "http://localhost");
     const path = url.pathname;
@@ -68,7 +70,7 @@ export function startDashboard(store: GardenStore, port: number): Promise<Server
           .slice(0, 50);
         const tasks = [...open, ...closed].map(t => ({ ...t, notes: store.listTaskNotes(t.id) }));
         const plants = store.listPlants().map(p => ({ ...p, events: store.listPlantEvents(p.id) }));
-        sendJson(res, 200, { tasks, plants });
+        sendJson(res, 200, { tasks, plants, season });
         return;
       }
       const patchMatch = path.match(/^\/api\/tasks\/(\d+)$/);
@@ -139,7 +141,7 @@ export function startDashboard(store: GardenStore, port: number): Promise<Server
         if (!EVENT_TYPE.includes(body.type)) { sendJson(res, 400, { error: "bad event type" }); return; }
         const note = isText(body.note) ? body.note.trim() : undefined;
         if (body.type === "note" && !note) { sendJson(res, 400, { error: "text required" }); return; }
-        sendJson(res, 201, store.logPlantEvent(Number(eventMatch[1]), body.type, note));
+        sendJson(res, 201, store.logPlantEvent(Number(eventMatch[1]), body.type, note, "me"));
         return;
       }
       const noteMatch = path.match(/^\/api\/tasks\/(\d+)\/notes$/);

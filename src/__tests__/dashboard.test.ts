@@ -202,6 +202,20 @@ describe("dashboard api", () => {
     expect(store.getPlant(p.id).sownAt).not.toBeNull();
   });
 
+  it("POST /api/plants/:id/events records the owner as the author", async () => {
+    const p = store.addPlant({ name: "Mint", kind: "herb", location: "bed", status: "planted" });
+    store.logPlantEvent(p.id, "treated", "срезаны сухие стебли"); // agent by default
+    const res = await post(`/api/plants/${p.id}/events`, { type: "note", note: "не расползается" });
+    expect(((await res.json()) as any).author).toBe("me");
+    expect(store.listPlantEvents(p.id).map(e => e.author)).toEqual(["agent", "me"]);
+  });
+
+  it("GET /api/state exposes the frost dates the page draws its gates from", async () => {
+    const res = await fetch(`${base}/api/state`);
+    const body = (await res.json()) as any;
+    expect(body.season).toEqual({ lastFrost: "06-15", firstFrost: "09-15" });
+  });
+
   it("POST /api/plants/:id/events rejects a bad type and a noteless note", async () => {
     const p = store.addPlant({ name: "Kale", kind: "vegetable", location: "bed", status: "planted" });
     expect((await post(`/api/plants/${p.id}/events`, { type: "watered" })).status).toBe(400);

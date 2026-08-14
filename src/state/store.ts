@@ -14,7 +14,10 @@ export interface Plant {
   status: "seed" | "seedling" | "planted" | "dormant" | "done";
   sownAt: string | null; plantedOutAt: string | null; notes: string | null; createdAt: string;
 }
-export interface PlantEvent { id: number; plantId: number; ts: string; type: string; note: string | null; }
+export interface PlantEvent {
+  id: number; plantId: number; ts: string; type: string;
+  note: string | null; author: "me" | "agent";
+}
 
 function isoDate(d: Date): string { return d.toISOString().split("T")[0]; }
 function addDays(date: string, days: number): string {
@@ -204,22 +207,23 @@ export class GardenStore {
     return this.getPlant(id);
   }
 
-  logPlantEvent(plantId: number, type: "sown"|"transplanted"|"harvested"|"treated"|"note", note?: string): PlantEvent {
+  logPlantEvent(plantId: number, type: "sown"|"transplanted"|"harvested"|"treated"|"note",
+    note?: string, author: "me" | "agent" = "agent"): PlantEvent {
     const plant = this.getPlant(plantId);
     const ts = new Date().toISOString();
     const res = this.db.prepare(
-      "INSERT INTO plant_events (plant_id, ts, type, note) VALUES (?, ?, ?, ?)"
-    ).run(plantId, ts, type, note ?? null);
+      "INSERT INTO plant_events (plant_id, ts, type, note, author) VALUES (?, ?, ?, ?, ?)"
+    ).run(plantId, ts, type, note ?? null, author);
     const today = ts.split("T")[0];
     if (type === "sown" && !plant.sownAt) this.updatePlant(plantId, { sownAt: today });
     if (type === "transplanted" && !plant.plantedOutAt) this.updatePlant(plantId, { plantedOutAt: today });
     const row = this.db.prepare("SELECT * FROM plant_events WHERE id = ?").get(Number(res.lastInsertRowid)) as any;
-    return { id: row.id, plantId: row.plant_id, ts: row.ts, type: row.type, note: row.note };
+    return { id: row.id, plantId: row.plant_id, ts: row.ts, type: row.type, note: row.note, author: row.author };
   }
 
   listPlantEvents(plantId: number): PlantEvent[] {
     return (this.db.prepare("SELECT * FROM plant_events WHERE plant_id = ? ORDER BY ts, id").all(plantId) as any[])
-      .map(r => ({ id: r.id, plantId: r.plant_id, ts: r.ts, type: r.type, note: r.note }));
+      .map(r => ({ id: r.id, plantId: r.plant_id, ts: r.ts, type: r.type, note: r.note, author: r.author }));
   }
 
   dueSummary(today: string = new Date().toISOString().split("T")[0]): { overdue: Task[]; today: Task[] } {
